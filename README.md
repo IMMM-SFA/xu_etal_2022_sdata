@@ -2,13 +2,13 @@ _your zenodo badge here_
 
 # xu_etal_2022_tbd
 
-**Building stock anthropogenic heat analysis**
+**LA County Building Anthropogenic Heat During Heat Waves**
 
-Yujie Xu<sup>1\*</sup>, Pouya V.<sup>1</sup>, Andy Jones<sup>1</sup>
+Yujie Xu<sup>1</sup>, Pouya Vahmani<sup>1</sup>, Tianzhen Hong\*, Andy Jones<sup>1</sup>
 
 <sup>1 </sup> LBNL
 
-\* corresponding author:  email@myorg.gov
+\* corresponding author:  thong@lbl.gov
 
 ## Abstract
 TBD
@@ -28,45 +28,74 @@ Human, I.M. (2021, April 14). Project/repo:v0.1.0 (Version v0.1.0). Zenodo. http
 ## Data reference
 
 ### Input data
-Reference for each minted data source for your input data.  For example:
+LA buildings
+- LA building charateristics: Assessor_Parcels_Data_-_2019.csv, from Dropbox
+- LA building geometry: LARIAC6_LA_County.geojson
 
-Human, I.M. (2021). My input dataset name [Data set]. DataHub. https://doi.org/some-doi-number
+Climate
+- WRF climate data (in a 12 km x 12 km grid system): from Pouya
 
 ### Output data
-Reference for each minted data source for your output data.  For example:
-
-Human, I.M. (2021). My output dataset name [Data set]. DataHub. https://doi.org/some-doi-number
+grid level data heat emission data: fixme add
 
 ## Contributing modeling software
 | Model | Version | Repository Link | DOI |
 |-------|---------|-----------------|-----|
-| model 1 | version | link to code repository | link to DOI dataset |
-| model 2 | version | link to code repository | link to DOI dataset |
-| component 1 | version | link to code repository | link to DOI dataset |
+| EnergyPlus | 22.1 | https://github.com/NREL/EnergyPlus |  |
 
 ## Reproduce my experiment
-Fill in detailed info here or link to other documentation that is a thorough walkthrough of how to use what is in this repository to reproduce your experiment.
 
+The following is an overview of the workflow
 
-1. Install the software components required to conduct the experiement from [Contributing modeling software](#contributing-modeling-software)
-2. Download and install the supporting input data required to conduct the experiement from [Input data](#input-data)
-3. Run the following scripts in the `workflow` directory to re-create this experiment:
+![workflow](workflow.png)
 
-| Script Name | Description | How to Run |
-| --- | --- | --- |
-| `step_one.py` | Script to run the first part of my experiment | `python3 step_one.py -f /path/to/inputdata/file_one.csv` |
-| `step_two.py` | Script to run the last part of my experiment | `python3 step_two.py -o /path/to/my/outputdir` |
+Following the steps to reproduce the analysis
 
-4. Download and unzip the output data from my experiment [Output data](#output-data)
-5. Run the following scripts in the `workflow` directory to compare my outputs to those from the publication
+1. Compile a LA county geojson file with building footprint, type, vintage,
+   number of stories, and footprint area using the geometry and assessor data
+   files from the Dropbox folder "City Data/LA".
+2. Acquire WRF climate data (in a 12 km x 12 km grid system)
+3. Convert the WRF climate data of the historic forcing (2018 July) to epw. In
+   this conversion, the UTC time in WRF needs to be converted to local time in
+   epw. We can use one representative grid in LA to compute the solar irradiance
+   data using the excel tool. This irradiance data will be used in epw files of
+   all grids, assuming there are little solar irradiance variations within the
+   LA county. This corresponds to the “2_wrf_to_csv_epw” code on Github.
+4. Assign the nearest grid point to each building. The epw files for the
+   assigned grid point will be used in the simulation of the target building.
+5. For each building type-vintage combination in each grid cell, simulate the
+   historic forcing. There are xx possible prototype buildings and 3 possible
+   vintages, but we will only simulate the type-vintage combination appearing in
+   each grid cell (see xx for the mapping from grid cells to type-vintage
+   combination). Use "3_write_baseline_idf" from
+   [im3 repo from Xuan](https://github.com/LBNL-ETA/im3-wrf/blob/main/3_write_baseline_idf.ipynb) to
+   create EnergyPlus models.
+7. Adjust prototype models
+- Change the design condition
+- Remove un-used dependencies from files
+- Update model version
+8. Use run_sim.py to run simulations
+9. Validation with measured and other data source: fixme: add rmd
+10. Produce grid-level heat emission data.
 
-| Script Name | Description | How to Run |
-| --- | --- | --- |
-| `compare.py` | Script to compare my outputs to the original | `python3 compare.py --orig /path/to/original/data.csv --new /path/to/new/data.csv` |
+<!-- Run the following scripts in the `workflow` directory to re-create this experiment: -->
+
+<!-- | Script Name | Description | How to Run | -->
+<!-- | --- | --- | --- | -->
+<!-- | `step_one.py` | Script to run the first part of my experiment | `python3 step_one.py -f /path/to/inputdata/file_one.csv` | -->
+<!-- | `step_two.py` | Script to run the last part of my experiment | `python3 step_two.py -o /path/to/my/outputdir` | -->
+
+<!-- 4. Download and unzip the output data from my experiment [Output data](#output-data) -->
+<!-- 5. Run the following scripts in the `workflow` directory to compare my outputs to those from the publication -->
+
+<!-- | Script Name | Description | How to Run | -->
+<!-- | --- | --- | --- | -->
+<!-- | `compare.py` | Script to compare my outputs to the original | `python3 compare.py --orig /path/to/original/data.csv --new /path/to/new/data.csv` | -->
 
 ## Reproduce my figures
-Use the scripts found in the `figures` directory to reproduce the figures used in this publication.
+Fixme: add rmd files
+<!-- Use the scripts found in the `figures` directory to reproduce the figures used in this publication. -->
 
-| Script Name | Description | How to Run |
-| --- | --- | --- |
-| `generate_figures.py` | Script to generate my figures | `python3 generate_figures.py -i /path/to/inputs -o /path/to/outuptdir` |
+<!-- | Script Name | Description | How to Run | -->
+<!-- | --- | --- | --- | -->
+<!-- | `generate_figures.py` | Script to generate my figures | `python3 generate_figures.py -i /path/to/inputs -o /path/to/outuptdir` | -->
