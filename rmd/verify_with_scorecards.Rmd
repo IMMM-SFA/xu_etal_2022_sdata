@@ -1,0 +1,76 @@
+
+---
+title: "Verify With Neighborhood"
+author: "Yujie Xu"
+date: "4/15/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE, message=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_knit$set(root.dir = "~/Dropbox/workLBNL/EESA/code/im3-wrf/rmd")
+```
+Verify with Scorecards
+
+```{r readSimData}
+library("dplyr")
+
+firstRun = FALSE
+if (firstRun) {
+  df.ann <- readr::read_csv("../annual_sim_result_by_idf_epw.csv")
+  df.area.prototype = readr::read_csv("../prototype_bldg_area.csv") %>%
+      dplyr::mutate(idf.kw = gsub(".idf", "", idf.name, fixed=TRUE)) %>%
+      dplyr::mutate(idf.kw = gsub(".", "_", idf.kw, fixed=TRUE)) %>%
+      dplyr::select(-idf.name) %>%
+      {.}
+  df.vin.type.idf <- readr::read_csv("../type_vintage_to_idf_mapping.csv") %>%
+      dplyr::select(-building.count) %>%
+      dplyr::mutate(idf.kw = gsub(".idf", "", idf.name, fixed=TRUE)) %>%
+      dplyr::mutate(idf.kw = gsub(".", "_", idf.kw, fixed=TRUE)) %>%
+      {.}
+  df.sim.ann.eui <- df.ann %>%
+      dplyr::mutate(energy.elec.GJ = energy.elec * 1e-9) %>%
+      dplyr::mutate(energy.gas.GJ = energy.gas * 1e-9) %>%
+      dplyr::group_by(idf.kw, epw.id) %>%
+      dplyr::summarise_at(vars(energy.elec.GJ, energy.gas.GJ), sum) %>%
+      dplyr::ungroup() %>%
+      dplyr::left_join(df.area.prototype, by="idf.kw") %>%
+      dplyr::mutate(elec.GJ.per.m2 = energy.elec.GJ / prototype.m2) %>%
+      dplyr::mutate(gas.GJ.per.m2 = energy.gas.GJ / prototype.m2) %>%
+      dplyr::left_join(df.vin.type.idf, by="idf.kw") %>%
+      {.}
+  df.sim.ann.eui %>%
+    readr::write_csv("sim_ann.csv")
+} else {
+  df.sim.ann.eui = readr::read_csv("sim_ann.csv")
+}
+
+df.sim.long <- df.sim.ann.eui %>%
+  dplyr::group_by(idf.kw, vintage) %>%
+  dplyr::summarise_at(vars(elec.GJ.per.m2, gas.GJ.per.m2), mean) %>%
+  dplyr::ungroup() %>%
+  tidyr::separate(idf.kw, "-", into=c("prefix", "suffix")) %>%
+  dplyr::select(-suffix) %>%
+  tidyr::gather(variable, GJ.per.m2, elec.GJ.per.m2:gas.GJ.per.m2) %>%
+  dplyr::mutate(data.source = "simulation") %>%
+  dplyr::rename(type = prefix) %>%
+  {.}
+
+res.scorecard.long <- readr::read_csv("../scorecard/IECC_res_9-5.csv") %>%
+  dplyr::select(-filename) %>%
+  dplyr::mutate(elec.GJ.per.m2 = (Electricity.kBtu * 0.0010551) / (ft2 * 0.092903)) %>%
+  dplyr::mutate(gas.GJ.per.m2 = (Gas.kBtu * 0.0010551) / (ft2 * 0.092903)) %>%
+  dplyr::select(vintage:gas.GJ.per.m2) %>%
+  tidyr::gather(variable, GJ.per.m2, elec.GJ.per.m2:gas.GJ.per.m2) %>%
+  dplyr::mutate(data.source = "PNNL scorecard") %>%
+  {.}
+
+df.sim.long %>%
+  dplyr::bind_rows(res.scorecard.long) %>%
+  dplyr::filter(type %in% c("SingleFamily", "MultiFamily")) %>%
+  tidyr::spread(variable, GJ.per.m2) %>%
+  {.}
+
+  dplyr::group_by(variable, )
+
+```

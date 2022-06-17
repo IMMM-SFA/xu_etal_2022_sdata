@@ -1,0 +1,330 @@
+---
+title: "Match building to grid"
+author: "Yujie Xu"
+date: "4/15/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE, message=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_knit$set(root.dir = "~/Dropbox/workLBNL/EESA/code/im3-wrf/")
+```
+
+```{r readAndJoin}
+library("sf")
+library("dplyr")
+run.read.data = FALSE
+sf::sf_use_s2(FALSE)
+
+if (run.read.data) {
+    df <- sf::st_read("~/Dropbox/workLBNL/CityBES/LA/data-raw/compiled_LA_building.geojson")
+    df.centroid <- sf::st_centroid(df)
+    df.grid <- sf::st_read("M02_EnergyPlus_Forcing_Historical_LowRes/meta/wrf-grids-origin.geojson")
+    df.join <- df.grid %>%
+        sf::st_join(df.centroid, join=sf::st_contains) %>%
+        dplyr::filter(!is.na(OBJECTID)) %>%
+        {.}
+    df.join %>%
+        sf::st_write("building_to_wrf_grid.geojson")
+} else {
+    df <- sf::st_read("~/Dropbox/workLBNL/CityBES/LA/data-raw/compiled_LA_building.geojson")
+    df.grid <- sf::st_read("M02_EnergyPlus_Forcing_Historical_LowRes/meta/wrf-grids-origin.geojson")
+    df.join = sf::st_read("building_to_wrf_grid.geojson")
+}
+
+la.boundary <- sf::read_sf("domain/la-county-boundary.geojson")
+## verify ones not joined in qgis
+## not.joined <- df %>%
+##     dplyr::filter(!(OBJECTID %in% df.join$OBJECTID)) %>%
+##     {.}
+## not.joined %>%
+##     sf::st_write("not_matched_to_grid_initial_s2_off.geojson")
+
+```
+
+```{r vis}
+
+df.grid %>%
+  ggplot2::ggplot() +
+  ggplot2::geom_sf(size = 0.2) +
+  ggplot2::ggtitle("wrf grid") +
+  ggplot2::geom_sf(data = la.boundary, fill=NA, color = "red") +
+  ggplot2::theme()
+
+```
+
+Compare building footprint and building size documented in the data set shows the majority of buildings have more larger building footprint area than the total building size. Thus, we cannot use footprint x number-of-stories to compute building size as in phase 1.
+
+```{r compareFootprintAndSize}
+footprint.size <- df %>%
+  sf::st_area()
+df$FootprintArea = as.vector(footprint.size) * 10.76
+
+df.no.geom <- df
+sf::st_geometry(df.no.geom) <- NULL
+df.no.geom %>%
+  dplyr::mutate(footprint.larger.than.SQFTmain = (FootprintArea > SQFTmain)) %>%
+  dplyr::select(footprint.larger.than.SQFTmain) %>%
+  summary()
+
+df.no.geom <- df.no.geom %>%
+    tibble::as_tibble()
+
+```
+
+Data filtering steps
+
+```{r summaryTable}
+df.join.no.geom <- df.join
+
+sf::st_geometry(df.join.no.geom) <- NULL
+
+df.join.no.geom <- df.join.no.geom %>%
+    tibble::as_tibble() %>%
+    {.}
+
+join.has.building <- df.join.no.geom %>%
+  dplyr::filter(!is.na(OBJECTID)) %>%
+  ## has valid type
+  dplyr::filter(!GeneralUseType == "(missing)") %>%
+  {.}
+remove.not.modelled.type <- join.has.building %>%
+    dplyr::filter(!remap.EP.ref.building == "?") %>%
+    dplyr::filter(remap.EP.ref.building != "parking") %>%
+    {.}
+remove.small.building <- remove.not.modelled.type %>%
+    dplyr::filter(SQFTmain > 323) %>%
+    {.}
+remove.no.height <- remove.small.building %>%
+    dplyr::filter(!((remap.EP.ref.building %in% c("hotel", "office")) & (is.na(HEIGHT)))) %>%
+    {.}
+
+join.has.building.filter <- remove.no.height %>%
+    dplyr::mutate_at(vars(remap.EP.ref.building), tolower) %>%
+    {.}
+
+df.grid.no.geom <- df.grid %>%
+    tibble::as_tibble()
+
+dfs.to.tabulate.grid <- list(df.grid.no.geom, join.has.building, remove.not.modelled.type, remove.small.building, remove.no.height)
+
+n.grid <- sapply(dfs.to.tabulate.grid, function(df.i) {
+    num.grid <- df.i %>%
+        dplyr::distinct(id) %>%
+        nrow()
+    num.grid
+})
+
+dfs.to.tabulate.building <- list(df.no.geom, join.has.building, remove.not.modelled.type, remove.small.building, remove.no.height)
+
+n.building <- sapply(dfs.to.tabulate.building, function(df.i) {
+    num.grid <- df.i %>%
+        dplyr::distinct(OBJECTID) %>%
+        nrow()
+    num.grid
+})
+
+tibble::tibble(steps = c("Before joining",
+                         "Join grid with building footprint",
+                         "Remove not modelled building types in EnergyPlus",
+                         "Remove buildings smaller than 323 sqft following Phase 1",
+                         "Remove hotel and office buildings with no height (used in sub-divide to small and large)"),
+               `number of grid` = n.grid,
+               `number of building` = n.building) %>%
+    knitr::kable()
+```
+
+The following buildings do not have corresponding EnergyPlus prototype model, thus are removed from the analysis.
+
+```{r removeUnmodelledType}
+join.has.building %>%
+    filter((remap.EP.ref.building == "?") | (remap.EP.ref.building == "parking")) %>%
+    distinct(GeneralUseType, SpecificUseType) %>%
+    arrange(GeneralUseType, SpecificUseType) %>%
+    knitr::kable()
+```
+
+Use the following assumed ceiling height to sub-divide building types sub-categories following Phase 1 approach.
+
+```{r ceilingHeight}
+ceiling.height <- tibble::tibble(GeneralUseType=c("Residential", "Commercial", "Institutional", "Industrial", "Recreational"),
+                                 floorHeight=c(10, 13, 16, 20, 10))
+ceiling.height %>%
+    knitr::kable(caption = "Assumed ceiling height by type")
+```
+
+```{r subdividType}
+join.type.divide <- join.has.building.filter %>%
+  dplyr::left_join(ceiling.height, by="GeneralUseType") %>%
+  dplyr::mutate(`num.floor` = round(HEIGHT / floorHeight, digits = 0)) %>%
+  ## remove the ones needing height for sub-classification
+  dplyr::filter(!((remap.EP.ref.building %in% c("hotel", "office")) & (is.na(HEIGHT)))) %>%
+  dplyr::mutate(remap.EP.2 = case_when(
+                  remap.EP.ref.building == "single-family" ~ ifelse(SQFTmain < 1500, "small single-family", "large single-family"),
+                  remap.EP.ref.building == "hotel" ~ ifelse(num.floor > 4 & SQFTmain >= 64583.46, "large hotel", "small hotel"),
+                  remap.EP.ref.building == "office" ~ case_when(num.floor >= 6 | SQFTmain > 100000 ~ "large office",
+                                                                num.floor <= 3 | SQFTmain < 2500 ~ "small office",
+                                                                TRUE ~ "medium office"),
+                  TRUE ~ remap.EP.ref.building)) %>%
+  {.}
+
+map.to.idf.name <- readr::read_csv("type_vintage_to_idf_mapping.csv") %>%
+  dplyr::select(-building.count) %>%
+  dplyr::mutate_at(vars(building.type), recode, "large retail"="retail", "small retail"="retail",
+                   "large restaurant"="full service restaurant", "small restaurant"="full service restaurant") %>%
+  {.}
+
+map.to.idf.name %>%
+  distinct(idf.name) %>%
+  readr::write_csv("unique_idf_used.csv")
+
+idf.source = readr::read_csv("unique_idf_used_with_source.csv")
+
+map.to.idf.name <- map.to.idf.name %>%
+  dplyr::left_join(idf.source, by="idf.name")
+
+all.building.count.to.prototype.with.source <- df.no.geom %>%
+  dplyr::left_join(ceiling.height, by="GeneralUseType") %>%
+  dplyr::mutate(`num.floor` = round(HEIGHT / floorHeight, digits = 0)) %>%
+  ## remove the ones needing height for sub-classification
+  dplyr::filter(!((remap.EP.ref.building %in% c("hotel", "office")) & (is.na(HEIGHT)))) %>%
+  dplyr::mutate(remap.EP.ref.building = as.character(remap.EP.ref.building)) %>%
+  dplyr::mutate_at(vars(remap.EP.ref.building), tolower) %>%
+  dplyr::mutate(remap.EP.2 = case_when(
+                  remap.EP.ref.building == "single-family" ~ ifelse(SQFTmain < 1500, "small single-family", "large single-family"),
+                  remap.EP.ref.building == "hotel" ~ ifelse(num.floor > 4 & SQFTmain >= 64583.46, "large hotel", "small hotel"),
+                  remap.EP.ref.building == "office" ~ case_when(num.floor >= 6 | SQFTmain > 100000 ~ "large office",
+                                                                num.floor <= 3 | SQFTmain < 2500 ~ "small office",
+                                                                TRUE ~ "medium office"),
+                  TRUE ~ remap.EP.ref.building)) %>%
+  dplyr::rename(building.type = remap.EP.2) %>%
+  dplyr::mutate(vintage = case_when(EffectiveYearBuilt < 1980 ~ "before 1980",
+                                    EffectiveYearBuilt < 2009 ~ "1981-2008 (2004)",
+                                    TRUE ~ "after 2008 (2013)")) %>%
+  dplyr::group_by(GeneralUseType, SpecificUseType, building.type, vintage) %>%
+  dplyr::summarise(building.count = n()) %>%
+  dplyr::ungroup() %>%
+  dplyr::mutate(building.type = ifelse(building.type == "?", NA, building.type)) %>%
+  dplyr::left_join(map.to.idf.name, by=c("building.type", "vintage")) %>%
+  dplyr::rename(prototype.building.type = building.type) %>%
+  dplyr::select(building.count, everything()) %>%
+  dplyr::arrange(desc(building.count)) %>%
+  {.}
+
+all.building.count.to.prototype.with.source %>%
+  readr::write_csv("all_building_count_to_prototype_with_source.csv")
+```
+
+```{r summaryStats}
+join.type.divide.numeric.summary <- join.type.divide %>%
+  dplyr::select(id, OBJECTID, SQFTmain, EffectiveYearBuilt, HEIGHT, num.floor) %>%
+  tidyr::gather(variable, value, SQFTmain:num.floor) %>%
+  dplyr::group_by(id, variable) %>%
+  dplyr::summarise_at(vars(value),
+                      tibble::lst("min"=~min(., na.rm = TRUE),
+                                  "Q1"=~quantile(probs=0.25, na.rm=TRUE, .),
+                                  "median"=~median(., na.rm = TRUE),
+                                  "mean"=~mean(., na.rm=TRUE),
+                                  "Q3"=~quantile(probs=0.25, na.rm=TRUE, .),
+                                  "max"=~max(., na.rm = TRUE))) %>%
+  dplyr::ungroup() %>%
+  dplyr::arrange(id, variable) %>%
+  {.}
+
+join.type.divide.numeric.summary %>%
+  readr::write_csv("summary/numeric_field_stats_per_grid.csv")
+```
+
+```{r summaryByMedian}
+join.type.divide.numeric.summary %>%
+    dplyr::select(id, variable, median) %>%
+    dplyr::group_by(variable) %>%
+    dplyr::summarise_at(vars(median),
+                      tibble::lst("min"=~min(., na.rm = TRUE),
+                                  "Q1"=~quantile(probs=0.25, na.rm=TRUE, .),
+                                  "median"=~median(., na.rm = TRUE),
+                                  "mean"=~mean(., na.rm=TRUE),
+                                  "Q3"=~quantile(probs=0.25, na.rm=TRUE, .),
+                                  "max"=~max(., na.rm = TRUE))) %>%
+  dplyr::ungroup() %>%
+  knitr::kable(caption = "Summary of the median of grid cell values")
+```
+
+```{r summaryByMean}
+join.type.divide.numeric.summary %>%
+    dplyr::select(id, variable, mean) %>%
+    dplyr::group_by(variable) %>%
+    dplyr::summarise_at(vars(mean),
+                        tibble::lst("min"=~min(., na.rm = TRUE),
+                                    "Q1"=~quantile(probs=0.25, na.rm=TRUE, .),
+                                    "median"=~median(., na.rm = TRUE),
+                                    "mean"=~mean(., na.rm=TRUE),
+                                    "Q3"=~quantile(probs=0.25, na.rm=TRUE, .),
+                                    "max"=~max(., na.rm = TRUE))) %>%
+    dplyr::ungroup() %>%
+    knitr::kable(caption = "Summary of the mean of grid cell values")
+
+```
+
+Classify buildings to three different vintages by EffectiveYearBuilt: "before 1980", "1981-2008 (2004)", and "after 2008 (2013)"
+
+```{r get vintage}
+join.type.divide.type.vin.cnt <- join.type.divide %>%
+  dplyr::select(id, centroid, OBJECTID, EffectiveYearBuilt, SQFTmain, HEIGHT, num.floor, remap.EP.2) %>%
+  dplyr::rename(building.type = remap.EP.2) %>%
+  dplyr::mutate(vintage = case_when(EffectiveYearBuilt < 1980 ~ "before 1980",
+                                    EffectiveYearBuilt < 2009 ~ "1981-2008 (2004)",
+                                    TRUE ~ "after 2008 (2013)")) %>%
+  {.}
+join.type.divide.type.vin.cnt %>%
+  readr::write_csv("compiled_cell_building.csv")
+
+join.type.divide.type.vin.cnt %>%
+    head() %>%
+    knitr::kable()
+```
+
+The following grid cells have valid building information.
+
+```{r visBuildingGridFinal}
+cell.with.building <- join.type.divide.type.vin.cnt %>%
+  distinct(id) %>%
+  {.}
+df.grid %>%
+  dplyr::mutate(centroid = as.character(centroid)) %>%
+  tidyr::separate(centroid, into=c("a", "lon", "lat", "b"), sep="[(),]") %>%
+  dplyr::mutate(lat = gsub(" ", "", lat)) %>%
+  dplyr::mutate_at(vars(lat, lon), as.numeric) %>%
+  dplyr::inner_join(cell.with.building, by="id") %>%
+  ggplot2::ggplot() +
+  ggplot2::geom_sf() +
+  ggplot2::geom_text(ggplot2::aes(x=lon, y=lat, label=id), color="red") +
+  ggplot2::ggtitle("Grid with valid buildings") +
+  ggplot2::theme_bw()
+```
+
+```{r allcode}
+
+## join.type.divide.type.vin.cnt %>%
+##   dplyr::group_by(building.type) %>%
+##   dplyr::summarise_if(is.numeric, function(x) mean(x, na.rm = TRUE)) %>%
+##   dplyr::ungroup() %>%
+##   dplyr::select(-id, OBJECTID) %>%
+##   readr::write_csv("summary/numeric_filed_summary_by_type.csv")
+
+## df.temp <- df.grid %>%
+##   dplyr::inner_join(cell.with.building, by="id") %>%
+##   dplyr::mutate(centroid = as.character(centroid)) %>%
+##   tidyr::separate(centroid, into=c("a", "lon", "lat", "b"), sep="[(),]") %>%
+##   dplyr::mutate(lat = gsub(" ", "", lat)) %>%
+##   dplyr::select(id, lon, lat) %>%
+##   {.}
+
+## sf::st_geometry(df.temp) <- NULL
+
+join.type.divide.type.vin.cnt %>%
+  dplyr::group_by(id, building.type, vintage) %>%
+  dplyr::summarise(building.count = n()) %>%
+  dplyr::ungroup() %>%
+  readr::write_csv("summary/building_type_vintage_count_per_grid.csv")
+```

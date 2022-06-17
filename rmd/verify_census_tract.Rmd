@@ -1,0 +1,538 @@
+---
+title: "Verify With Census Tract"
+author: "Yujie Xu"
+date: "4/15/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE, message=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_knit$set(root.dir = "~/Dropbox/workLBNL/EESA/code/im3-wrf/rmd")
+```
+
+## Procedure of data validation
+Data source
+* Energy Atlas: monthly consumption at census tract level from 2014 to 2016.
+* Building Performance Database: summary stats for large public buildings (commercial, institutional, apartments, etc.) 
+
+## Census tract data
+
+Read census tract level monthly energy data "kwh_monthly.csv" from Dropbox folder
+```{r read_energy, message=FALSE}
+library("dplyr")
+library("FedData")
+library("ggplot2")
+df.tract.energy <- readr::read_csv("../energyAtlas/Census Tract/kwh_monthly.csv")
+```
+
+The following is a preview of the census tract data.
+```{r read_tract, message=FALSE}
+df.tract.energy %>%
+    head() %>%
+    knitr::kable()
+```
+
+```{r tract_summary, message=FALSE}
+df.tract.energy %>%
+    dplyr::mutate_if(is.character, as.factor) %>%
+    dplyr::mutate(year = factor(year), month = factor(month)) %>%
+    dplyr::select(geoid, year, month, everything()) %>%
+    summary()
+```
+Energy data in Energy Atlas has the following use types. The definition of each use type are as following according to https://energyatlas.ucla.edu/methods
+
+* Single Family
+* Multi-family: Duplexes to large apartment complexes.
+* Condominiums
+* Residential Other: Mobile home parks, manufactured homes, nursing homes, rural residential, and unknown other residential use codes that do not clearly fit within single family, multi-family, or condominium categories.
+* Residential Uncategorized: Consumption that was categorized as residential from the utility designation, but unable to be linked to its parcel and thus unable to be categorized by parcel use type. Without parcel linkage, this consumption lacks square-footage and building vintage information. 
+* Residential (Total): Sum of all residential categories.
+* Commercial: Office buildings, hotels, retail, restaurants, mixed-use commercial, etc.
+* Industrial: Manufacturing, warehouses, processing facilities, extraction sites, etc.
+* Institutional: Schools, public hospitals, government owned facilities, churches, tax-exempt properties, etc.
+* Agriculture: Farms, agricultural lands, orchards, etc.
+* Other: Spans diverse range of use types unable to fit within the pre-set categories, including miscellaneous bus terminals, airports, vacant land, reservoirs, truck terminals, right-of-ways, etc. 
+* Uncategorized: Consumption that was categorized as non-residential from the utility designation, but unable to be linked to its parcel and lacking NAICS/SIC codes and thus unable to be categorized by parcel use type.  Without parcel linkage, this consumption lacks square-footage and building vintage information.
+
+```{r usetype, message=FALSE}
+df.tract.energy %>%
+    distinct(usetype) %>%
+    knitr::kable() %>%
+    {.}
+```
+
+Census tract geometry data is downloaded from: https://catalog.data.gov/dataset/tiger-line-shapefile-2019-state-california-current-census-tract-state-based, the file "../energyAtlas/Census Tract/la-county-census-tracts.geojson" on Dropbox has a missing census tract.
+
+```{r get_geometry, message=FALSE}
+la.boundary <- sf::st_read("../domain/la-county-boundary.geojson")
+df.tract.energy.fourtype <- df.tract.energy %>%
+    dplyr::filter(usetype %in% c("res", "commercial", "industrial", "institutional")) %>%
+    {.}
+tract.ca <- sf::st_read("../domain/tl_2019_06_tract/tl_2019_06_tract.shp") %>%
+    dplyr::select(GEOID, NAME) %>%
+    {.}
+## don't use this geom file from Dropbox "../energyAtlas/Census Tract/la-county-census-tracts.geojson",
+## one census tract geometry is missing
+
+df.tract.energy.fourtype.filter <- df.tract.energy.fourtype %>%
+    dplyr::filter(usage > 0, sqft > 0) %>%
+    {.}
+
+df.tract.energy.agg.filter <- df.tract.energy.fourtype.filter %>%
+  dplyr::group_by(geoid, year, month) %>%
+  dplyr::summarise_at(vars(usage, sqft), sum) %>%
+  dplyr::ungroup() %>%
+  {.}
+```
+
+```{r show_tract_filter, fig.show="hold", out.width="50%", message=FALSE}
+
+df.tract.energy.geom <- df.tract.energy.agg.filter %>%
+    dplyr::filter(year == 2016, month == 7) %>%
+    dplyr::inner_join(tract.ca, by=c("geoid"="GEOID")) %>%
+    sf::st_as_sf() %>%
+    {.}
+
+df.tract.energy.nogeom <- df.tract.energy.geom
+
+sf::st_geometry(df.tract.energy.nogeom) <- NULL
+```
+
+There are `r df.tract.energy.nogeom %>% distinct(geoid) %>% nrow()` census tracts with energy data.
+
+```{r plot, message=FALSE}
+df.tract.energy.geom %>%
+    dplyr::mutate(kwh.per.m2 = usage / (sqft * 0.092903)) %>%
+    dplyr::mutate(kwh.per.m2.bin = case_when(kwh.per.m2 < 3 ~ "< 3",
+                                             kwh.per.m2 < 5 ~ "3-5",
+                                             kwh.per.m2 < 7 ~ "5-7",
+                                             TRUE ~ ">= 7")) %>%
+    dplyr::mutate(kwh.per.m2.bin = factor(kwh.per.m2.bin, levels = c("< 3", "3-5", "5-7", ">= 7"))) %>%
+    ggplot2::ggplot(ggplot2::aes(fill = kwh.per.m2.bin)) +
+    ## ggplot2::ggplot(ggplot2::aes(fill = kwh.per.m2)) +
+    ggplot2::geom_sf(size = 0.1) +
+    ggplot2::scale_fill_brewer(palette = "YlOrBr", direction = 1) +
+    ggplot2::ggtitle("Energy Atlas 2016 July") +
+    ggplot2::theme()
+```
+
+```{r get_simulation_result, message=FALSE}
+
+## producing monthly total consumption, only need to run once
+## result <- readr::read_csv("../sim_result_by_idf_epw.csv")
+## monthly.total.result <- result %>%
+##     dplyr::group_by(idf.kw, epw.id) %>%
+##     dplyr::summarise_if(is.numeric, sum) %>%
+##     dplyr::ungroup() %>%
+##     dplyr::select(idf.kw, epw.id, energy.overall) %>%
+##     {.}
+## monthly.total.result %>%
+##     readr::write_csv("../sim_result_monthly_total_idf_epw.csv")
+
+## unit is J
+monthly.total.result <- readr::read_csv("../sim_result_monthly_total_idf_epw.csv")
+
+sf::sf_use_s2(FALSE)
+
+## match building to census tract, only need to run once
+## df.building <- sf::st_read("~/Dropbox/workLBNL/CityBES/LA/data-raw/compiled_LA_building.geojson")
+## df.building.centroid <- sf::st_centroid(df.building)
+## tract.ca.4326 <- sf::st_transform(tract.ca, crs=4326)
+## df.building.tract <- sf::st_join(df.building, tract.ca.4326, join = sf::st_within) %>%
+##     {.}
+## df.building.tract.no.geom <- df.building.tract
+## sf::st_geometry(df.building.tract.no.geom) <- NULL
+## df.building.tract.no.geom %>%
+##     dplyr::filter(!is.na(GEOID)) %>%
+##     dplyr::distinct(OBJECTID, GEOID) %>%
+##     readr::write_csv("../building_id_to_census_tract.csv")
+
+df.building.tract.no.geom <- readr::read_csv(("../building_id_to_census_tract.csv"))
+
+## get building metadata run once
+## df.grid = readr::read_csv("../compiled_cell_building.csv")
+## df.area <- readr::read_csv("../LA_building_footprint_m2.csv")
+## df.vin.type.idf <- readr::read_csv("../type_vintage_to_idf_mapping.csv") %>%
+##     dplyr::select(-building.count) %>%
+##     {.}
+## df.area.prototype = readr::read_csv("../prototype_bldg_area.csv") %>%
+##     dplyr::mutate(idf.kw = gsub(".idf", "", idf.name, fixed=TRUE)) %>%
+##     dplyr::mutate(idf.kw = gsub(".", "_", idf.kw, fixed=TRUE)) %>%
+##     dplyr::select(-idf.name) %>%
+##     {.}
+## building.info <- df.grid %>%
+##     dplyr::inner_join(df.area, by="OBJECTID") %>%
+##     dplyr::mutate(building.area.m2 = SQFTmain * 0.0929) %>%
+##     dplyr::select(id, OBJECTID, vintage, building.type, building.area.m2, FootprintArea.m2) %>%
+##     dplyr::rename(epw.id=id) %>%
+##     dplyr::inner_join(df.vin.type.idf, by=c("building.type", "vintage")) %>%
+##     dplyr::mutate(idf.kw = gsub(".idf", "", idf.name, fixed=TRUE)) %>%
+##     dplyr::mutate(idf.kw = gsub(".", "_", idf.kw, fixed=TRUE)) %>%
+##     dplyr::left_join(df.area.prototype, by="idf.kw") %>%
+##     {.}
+## building.info %>%
+##     readr::write_csv("../building_info.csv")
+building.info <- readr::read_csv("../building_info.csv")
+
+## fixme: buildings not properly assigned to grids
+## not.found <- df.building.tract.no.geom %>%
+##     dplyr::left_join(building.info, by="OBJECTID") %>%
+##     dplyr::filter(is.na(idf.name)) %>%
+##     tibble::as_tibble() %>%
+##     {.}
+## not.found %>%
+##     dplyr::filter(SpecificUseType == "Office Building") %>%
+##     {.}
+## not.found %>%
+##     tibble::as_tibble() %>%
+##     distinct(GeneralUseType, SpecificUseType, building.type) %>%
+##     arrange(GeneralUseType, SpecificUseType, building.type) %>%
+##     readr::write_csv("../temp.csv")
+## df.building.centroid %>%
+##     dplyr::filter(OBJECTID %in% not.found$OBJECTID) %>%
+##     sf::st_write("../not_found_match.geojson")
+
+sim.tract.join <- df.building.tract.no.geom %>%
+    tibble::as_tibble() %>%
+    dplyr::filter(!is.na(GEOID)) %>%
+    dplyr::inner_join(building.info, by="OBJECTID") %>%
+    dplyr::mutate(idf.kw = gsub(".idf", "", idf.name, fixed=TRUE)) %>%
+    dplyr::mutate(idf.kw = gsub(".", "_", idf.kw, fixed=TRUE)) %>%
+    dplyr::inner_join(monthly.total.result, by=c("idf.kw", "epw.id")) %>%
+    dplyr::mutate(energy.kwh = energy.overall * 1e-9 * 277.778) %>%
+    {.}
+```
+
+```{r vis, message=FALSE}
+sim.agg.to.tract <- sim.tract.join %>%
+    dplyr::group_by(GEOID) %>%
+    summarise_at(vars(energy.kwh, building.area.m2, FootprintArea.m2), sum) %>%
+    dplyr::ungroup() %>%
+    {.}
+
+idf.kw.to.usetype <- readr::read_csv("../idf_kw_to_EnergyAtlas_usetype.csv") %>%
+  {.}
+
+sim.agg.to.tract.usetype <- sim.tract.join %>%
+  dplyr::inner_join(idf.kw.to.usetype, by="idf.kw") %>%
+  dplyr::group_by(GEOID, usetype) %>%
+  summarise_at(vars(energy.kwh, building.area.m2, FootprintArea.m2), sum) %>%
+  dplyr::ungroup() %>%
+  {.}
+
+sim.agg.to.tract.geo <- sim.agg.to.tract %>%
+    dplyr::inner_join(tract.ca, by="GEOID") %>%
+    sf::st_as_sf() %>%
+    {.}
+```
+
+```{r vis2, fig.show="hold", out.width="50%", message=FALSE}
+
+## sim.agg.to.tract.geo %>%
+##     sf::st_write("geo_output/sim_agg_to_tract.geojson")
+
+wrf.grid.with.building <- sf::st_read("../grid_with_building.geojson")
+
+sim.agg.to.tract.geo %>%
+    ggplot2::ggplot(ggplot2::aes(fill = energy.kwh)) +
+    ggplot2::geom_sf(size = 0.2) +
+    ggplot2::scale_fill_distiller(palette = "YlOrBr", direction = 1) +
+    ggplot2::ggtitle("Energy Atlas Census tract total electricity + gas consumption (kWh)") +
+    ggplot2::ylim(c(33.6, 34.8)) +
+    ggplot2::geom_sf(data=wrf.grid.with.building, fill=NA, size=0.1) +
+    ggplot2::theme(axis.ticks.x = ggplot2::element_blank(),
+                   axis.ticks.y = ggplot2::element_blank(),
+                   axis.text.x = ggplot2::element_blank(),
+                   axis.text.y = ggplot2::element_blank())
+
+sim.agg.to.tract.geo %>%
+    dplyr::mutate(kwh.per.m2 = energy.kwh / building.area.m2) %>%
+    ggplot2::ggplot(ggplot2::aes(fill = kwh.per.m2)) +
+    ggplot2::geom_sf(size = 0.2) +
+    ggplot2::geom_sf(data=wrf.grid.with.building, fill=NA, size=0.1) +
+    ggplot2::scale_fill_distiller(palette = "YlOrBr", direction = 1) +
+    ggplot2::ggtitle("Energy Atlas Building size normalized electricity + gas usage (kWh/m2)") +
+    ggplot2::ylim(c(33.6, 34.8)) +
+    ggplot2::geom_sf(data=wrf.grid.with.building, fill=NA, size=0.1) +
+    ggplot2::theme(axis.ticks.x = ggplot2::element_blank(),
+                   axis.ticks.y = ggplot2::element_blank(),
+                   axis.text.x = ggplot2::element_blank(),
+                   axis.text.y = ggplot2::element_blank())
+
+la.energy.tract.total <- df.tract.energy.agg.filter %>%
+    dplyr::filter(year == 2016, month == 7) %>%
+    dplyr::select(-year, -month) %>%
+    dplyr::mutate(m2 = sqft * 0.092903) %>%
+    dplyr::mutate(data.source = "Energy Atlas July 2016") %>%
+    dplyr::mutate(GEOID = geoid) %>%
+    dplyr::select(-sqft, -geoid) %>%
+    {.}
+
+la.energy.tract.total.usetype <- df.tract.energy.fourtype.filter %>%
+  dplyr::filter(year == 2016, month == 7) %>%
+  dplyr::select(-year, -month) %>%
+  dplyr::mutate(m2 = sqft * 0.092903) %>%
+  dplyr::mutate(data.source = "Energy Atlas July 2016") %>%
+  dplyr::mutate(GEOID = geoid) %>%
+  dplyr::select(usage, m2, data.source, GEOID, usetype) %>%
+  {.}
+
+total.cmp <- sim.agg.to.tract %>%
+    dplyr::select(GEOID, energy.kwh, building.area.m2) %>%
+    dplyr::mutate(GEOID = as.character(GEOID)) %>%
+    dplyr::rename(usage = energy.kwh, m2 = building.area.m2) %>%
+    dplyr::mutate(data.source = "Simulation July 2018") %>%
+    dplyr::bind_rows(la.energy.tract.total) %>%
+    {.}
+
+total.cmp.usetype <- sim.agg.to.tract.usetype %>%
+  dplyr::select(GEOID, usetype, energy.kwh, building.area.m2) %>%
+  dplyr::mutate(GEOID = as.character(GEOID)) %>%
+  dplyr::rename(usage = energy.kwh, m2 = building.area.m2) %>%
+  dplyr::mutate(data.source = "Simulation July 2018") %>%
+  dplyr::bind_rows(la.energy.tract.total.usetype) %>%
+  dplyr::mutate_at(vars(usetype), recode, "res"="res_total") %>%
+  {.}
+```
+
+```{r vis3, fig.show="hold", out.width="50%", message=FALSE}
+total.cmp %>%
+    dplyr::mutate(kwh.per.m2 = usage / m2) %>%
+    dplyr::group_by(GEOID) %>%
+    dplyr::filter(n() == 2) %>%
+    dplyr::ungroup() %>%
+    dplyr::inner_join(tract.ca, by="GEOID") %>%
+    tibble::as_tibble() %>%
+    dplyr::mutate(kwh.per.m2.bin = case_when(kwh.per.m2 < 3 ~ "< 3",
+                                            kwh.per.m2 < 5 ~ "3-5",
+                                            kwh.per.m2 < 7 ~ "5-7",
+                                            TRUE ~ ">= 7")) %>%
+    ##   dplyr::group_by(data.source) %>%
+    ##   dplyr::summarise_at(vars(kwh.per.m2), tibble::lst(min, q1=~quantile(., probs=0.25),
+    ##                                         median, q3=~quantile(., probs=0.75),
+    ##                                         max)) %>%
+    ## dplyr::ungroup() %>%
+    ## {.}
+    sf::st_as_sf() %>%
+    ggplot2::ggplot(ggplot2::aes(fill = kwh.per.m2.bin)) +
+    ggplot2::geom_sf(size = 0.2) +
+    ggplot2::scale_fill_brewer(palette = "YlOrBr", direction = 1) +
+    ggplot2::ggtitle("Total electricity + gas usage normalized by total building size (kwh/m2)") +
+    ggplot2::facet_wrap(.~data.source) +
+    ggplot2::theme(axis.ticks.x = ggplot2::element_blank(),
+                   axis.ticks.y = ggplot2::element_blank(),
+                   axis.text.x = ggplot2::element_blank(),
+                   axis.text.y = ggplot2::element_blank())
+
+to.plot.total.cmp <- total.cmp %>%
+  dplyr::mutate(kwh.per.m2 = usage / m2) %>%
+  dplyr::group_by(GEOID) %>%
+  dplyr::filter(n() == 2) %>%
+  dplyr::ungroup() %>%
+  tidyr::gather(variable, value, c(usage, m2, kwh.per.m2)) %>%
+  tidyr::spread(data.source, value) %>%
+  {.}
+
+to.plot.total.cmp %>%
+  dplyr::filter(variable == "kwh.per.m2") %>%
+  ggplot2::ggplot(ggplot2::aes(x=`Simulation July 2018`, `Energy Atlas July 2016`)) +
+  ggplot2::coord_cartesian(xlim=c(0, 1400), ylim=c(0, 1400)) +
+  ggplot2::geom_point(size = 0.2) +
+  ggplot2::geom_smooth(method="lm", size = 0.5) +
+  ggplot2::geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+  ggplot2::ggtitle("Electricity + gas usage per total building area \n(kWh/m2)") +
+  ggplot2::theme()
+
+```
+
+The following compares the energy use per m2 by different usetype
+
+```{r scatter_compare_usetype, fig.show="hold", out.width="50%", message=FALSE}
+to.plot.total.usetype.cmp <- total.cmp.usetype %>%
+  dplyr::mutate(kwh.per.m2 = usage / m2) %>%
+  dplyr::group_by(GEOID, usetype) %>%
+  dplyr::filter(n() == 2) %>%
+  dplyr::ungroup() %>%
+  tidyr::gather(variable, value, c(usage, m2, kwh.per.m2)) %>%
+  tidyr::spread(data.source, value) %>%
+  {.}
+
+usetypes = c("res_total", "commercial", "institutional", "industrial")
+labels = c("residential", "commercial", "institutional", "industrial")
+
+upper.lims = c(25, 900, 120, 300)
+
+for (i in seq_along(usetypes)) {
+  p1 <- total.cmp.usetype %>%
+    dplyr::mutate(kwh.per.m2 = usage / m2) %>%
+    dplyr::group_by(GEOID, usetype) %>%
+    dplyr::filter(n() == 2) %>%
+    dplyr::ungroup() %>%
+    dplyr::inner_join(tract.ca, by="GEOID") %>%
+    tibble::as_tibble() %>%
+    dplyr::mutate(kwh.per.m2.bin = case_when(kwh.per.m2 < 3 ~ "< 3",
+                                            kwh.per.m2 < 5 ~ "3-5",
+                                            kwh.per.m2 < 10 ~ "5-10",
+                                            kwh.per.m2 < 15 ~ "10-15",
+                                            kwh.per.m2 < 25 ~ "15-25",
+                                            TRUE ~ ">= 25")) %>%
+    dplyr::mutate(kwh.per.m2.bin = factor(kwh.per.m2.bin, levels = c("< 3", "3-5", "5-10", "10-15", "15-25", ">= 25"))) %>%
+    dplyr::filter(usetype == usetypes[[i]]) %>%
+    ##   dplyr::group_by(data.source) %>%
+    ##   dplyr::summarise_at(vars(kwh.per.m2), tibble::lst(min, q1=~quantile(., probs=0.25),
+    ##                                         median, q3=~quantile(., probs=0.75),
+    ##                                         max)) %>%
+    ## dplyr::ungroup() %>%
+    ## {.}
+    sf::st_as_sf() %>%
+    ggplot2::ggplot(ggplot2::aes(fill = kwh.per.m2.bin)) +
+    ggplot2::geom_sf(size = 0.2) +
+    ggplot2::scale_fill_brewer(palette = "YlOrBr", direction = 1) +
+    ggplot2::ggtitle(sprintf("%s electricity + gas usage normalized by total building size (kwh/m2)", labels[[i]])) +
+    ggplot2::facet_wrap(.~data.source) +
+    ggplot2::theme(axis.ticks.x = ggplot2::element_blank(),
+                   axis.ticks.y = ggplot2::element_blank(),
+                   axis.text.x = ggplot2::element_blank(),
+                   axis.text.y = ggplot2::element_blank())
+  p2 <- to.plot.total.usetype.cmp %>%
+    dplyr::filter(variable == "kwh.per.m2", usetype == usetypes[[i]]) %>%
+    ggplot2::ggplot(ggplot2::aes(x=`Simulation July 2018`, `Energy Atlas July 2016`)) +
+    ggplot2::geom_point(size = 0.2) +
+    ggplot2::geom_smooth(method="lm", size = 0.5) +
+    ggplot2::geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+    ggplot2::ggtitle(sprintf("%s electricity + gas usage \nper total building area (kWh/m2)", labels[[i]])) +
+    ggplot2::coord_cartesian(xlim = c(0, upper.lims[[i]]), ylim = c(0, upper.lims[[i]])) +
+    ggplot2::theme()
+  print(p1)
+  print(p2)
+}
+```
+
+The following compares the total building size of the four major times in each census tract, restricting to census tracts with Energy Atlas data.
+
+```{r cmp_size, out.width="100%", message=FALSE}
+ids.in.EnergyAtlas <- total.cmp.usetype %>%
+  dplyr::filter(data.source == "Energy Atlas July 2016") %>%
+  distinct(GEOID)
+
+## fixme: remove axis ticks
+to.plot.m2.usetype.cmp <- total.cmp.usetype %>%
+  dplyr::select(-usage) %>%
+  dplyr::group_by(GEOID, data.source) %>%
+  dplyr::mutate(m2.total = sum(m2)) %>%
+  dplyr::ungroup() %>%
+  dplyr::mutate(percent.area = m2 / m2.total * 100) %>%
+  {.}
+
+to.plot.m2.usetype.cmp %>%
+  dplyr::inner_join(ids.in.EnergyAtlas, by="GEOID") %>%
+  ggplot2::ggplot(ggplot2::aes(x = usetype, y = percent.area, fill=data.source)) +
+  ggplot2::geom_violin(position = ggplot2::position_dodge(0.9)) +
+  ggplot2::geom_boxplot(position = ggplot2::position_dodge(0.9), width=0.05, outlier.shape = NA) +
+  ggplot2::ggtitle("Comparing the percent area distribution of the four major use types") +
+  ggplot2::theme()
+
+to.plot.m2.usetype.cmp %>%
+  dplyr::inner_join(ids.in.EnergyAtlas, by="GEOID") %>%
+  dplyr::inner_join(tract.ca, by="GEOID") %>%
+  sf::st_as_sf() %>%
+  ggplot2::ggplot() +
+  ggplot2::geom_sf(ggplot2::aes(fill=percent.area), size=0.2) +
+  ggplot2::facet_grid(data.source ~ usetype) +
+  ggplot2::scale_fill_distiller(palette = "Spectral") +
+  ggplot2::theme(axis.ticks.x = ggplot2::element_blank(),
+                 axis.ticks.y = ggplot2::element_blank(),
+                 axis.text.x = ggplot2::element_blank(),
+                 axis.text.y = ggplot2::element_blank(),
+                 legend.position = "bottom")
+```
+
+The following compares the median consumption per m2 for different usetype. usage_med_sqft column in the Energy Atlas data set reports the median kWh per sqft usage per census tract. Before the comparison, the negative values are removed.
+
+```{r cmp_median, out.width="100%", message=FALSE}
+median.EnergyAtlas <- df.tract.energy.fourtype.filter %>%
+  dplyr::filter(year == 2016, month == 7) %>%
+  dplyr::filter(usage_med_sqft > 0) %>%
+  ## unit conversion
+  dplyr::mutate(median.kwh.per.m2 = usage_med_sqft / 0.092903) %>%
+  dplyr::select(geoid, usetype, median.kwh.per.m2) %>%
+  dplyr::mutate(data.source = "Energy Atlas July 2016") %>%
+  dplyr::rename(GEOID = geoid) %>%
+  {.}
+
+median.sim <- sim.tract.join %>%
+  dplyr::mutate(kwh.per.m2 = energy.kwh / building.area.m2) %>%
+  dplyr::inner_join(idf.kw.to.usetype, by="idf.kw") %>%
+  dplyr::select(OBJECTID, GEOID, building.type, usetype, kwh.per.m2) %>%
+  dplyr::group_by(GEOID, usetype) %>%
+  dplyr::summarise(median.kwh.per.m2 = median(kwh.per.m2)) %>%
+  dplyr::ungroup() %>%
+  dplyr::mutate(data.source = "Simulation July 2018") %>%
+  {.}
+
+to.plot.median.cmp <- median.sim %>%
+  dplyr::bind_rows(median.EnergyAtlas) %>%
+  dplyr::mutate_at(vars(usetype), recode, "res"="res_total") %>%
+  dplyr::group_by(GEOID, usetype) %>%
+  dplyr::filter(n() == 2) %>%
+  dplyr::ungroup() %>%
+  {.}
+
+to.plot.median.cmp %>%
+  dplyr::inner_join(tract.ca, by="GEOID") %>%
+  dplyr::mutate(median.kwh.per.m2.bin = case_when(median.kwh.per.m2 < 12 ~ "< 12",
+                                                  median.kwh.per.m2 < 25 ~ "< 25",
+                                                  median.kwh.per.m2 < 50 ~ "< 50",
+                                                  median.kwh.per.m2 < 100 ~ "< 100",
+                                                  median.kwh.per.m2 < 200 ~ "< 200",
+                                                  TRUE ~ ">= 200")) %>%
+  dplyr::mutate(median.kwh.per.m2.bin = factor(median.kwh.per.m2.bin,
+                                               levels = c("< 12", "< 25", "< 50", "< 100", "< 200", ">= 200"))) %>%
+  sf::st_as_sf() %>%
+  ggplot2::ggplot() +
+  ggplot2::geom_sf(ggplot2::aes(fill=median.kwh.per.m2.bin), size=0.2) +
+  ggplot2::scale_fill_brewer(palette = "Oranges") +
+  ggplot2::facet_grid(data.source ~ usetype) +
+  ggplot2::theme(axis.ticks.x = ggplot2::element_blank(),
+                 axis.ticks.y = ggplot2::element_blank(),
+                 axis.text.x = ggplot2::element_blank(),
+                 axis.text.y = ggplot2::element_blank(),
+                 legend.position = "bottom")
+```
+
+```{r cmp_median_table, message=FALSE}
+to.plot.median.cmp %>%
+  dplyr::group_by(data.source, usetype) %>%
+  dplyr::summarise_at(vars(median.kwh.per.m2), tibble::lst(min, q1=~quantile(., probs=0.25),
+                                        median, q3=~quantile(., probs=0.75),
+                                        max)) %>%
+  dplyr::ungroup() %>%
+  dplyr::select(usetype, data.source, everything()) %>%
+  dplyr::arrange(usetype, data.source) %>%
+  knitr::kable(caption="census tract median electricity + gas kWh/m2", digits = 2) %>%
+  {.}
+  ## kableExtra::collapse_rows()
+
+to.plot.median.cmp %>%
+  dplyr::mutate(median.kbtu.per.sqft = 3.15459 * median.kwh.per.m2) %>%
+  dplyr::group_by(data.source, usetype) %>%
+  dplyr::summarise_at(vars(median.kbtu.per.sqft), tibble::lst(min, q1=~quantile(., probs=0.25),
+                                                              median, q3=~quantile(., probs=0.75),
+                                                              max)) %>%
+  dplyr::ungroup() %>%
+  dplyr::select(usetype, data.source, everything()) %>%
+  dplyr::arrange(usetype, data.source) %>%
+  knitr::kable(caption="census tract median electricity + gas kBtu/ft2", digits = 2) %>%
+  {.}
+  ## kableExtra::collapse_rows()
+```
+
+```{r monthlyDataProfile}
+df.tract.energy.fourtype.filter %>%
+  dplyr::filter(year == 2016) %>%
+  dplyr::group_by(geoid, year, month, usetype) %>%
+  dplyr::summarise(usage = median(usage)) %>%
+  dplyr::ungroup() %>%
+  {.}
+```
+;;
