@@ -223,3 +223,7 @@ packrat/lib*/
 input_data/
 output_data/
 intermediate_data/
+
+# temp files
+\#*#
+.\#*
