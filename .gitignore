@@ -218,3 +218,8 @@ rsconnect
 inst/shinyApp/temp.ini
 inst/shinyApp/test.ini
 packrat/lib*/
+
+# Data Folders
+input_data/
+output_data/
+intermediate_data/
