@@ -224,6 +224,9 @@ input_data/
 output_data/
 intermediate_data/
 
+# Data Files
+*.csv
+
 # temp files
 \#*#
 .\#*
