@@ -1,0 +1,256 @@
+---
+title: "2018 Annual heat emission from EnergyPlus simulation coarse grid"
+author: "Yujie Xu"
+date: "8/15/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE)
+knitr::opts_knit$set(root.dir = "~/Dropbox/workLBNL/EESA/code/im3-wrf/")
+```
+
+# Spatial Distribution of Annual Total Heat Emission
+
+```{r helpers, message=FALSE}
+library("dplyr")
+library("tmap")
+
+get.spatial.path.suf <- function(spatial.level) {
+  if (spatial.level == "coarse") {
+    spatial.path = "M02_EnergyPlus_Forcing_Historical_LowRes/meta"
+    spatial.suf = ""
+    spatial.label = "Coarse Grids"
+  } else if (spatial.level == "finer") {
+    spatial.path = "high res grid for reporting"
+    spatial.suf = "_finer"
+    spatial.label = "Finer Grids"
+  } else if (spatial.level == "tract") {
+    spatial.path = "domain/tl_2018_06_tract"
+    ## spatial.path = "domain"
+    spatial.suf = "_tract"
+    spatial.label = "Census Tract"
+  }
+  list(spatial.path, spatial.suf, spatial.label)
+}
+
+get.annual.data <- function(time.pref, spatial.suf, df.area=NULL) {
+  heat.by.grid.monthly = readr::read_csv(sprintf("aggregated_heat/%s%s_monthly.csv", time.pref, spatial.suf))
+  heat.by.grid.annual.comp = heat.by.grid.monthly %>%
+    dplyr::group_by(id, variable) %>%
+    dplyr::summarise(value = sum(value)) %>%
+    dplyr::ungroup() %>%
+    dplyr::mutate(emission.GJ = value * 1e-9) %>%
+    dplyr::mutate(emission.mwh = emission.GJ * 0.277778) %>%
+    {.}
+  if (!is.null(df.area)) {
+    heat.by.grid.annual.comp <- heat.by.grid.annual.comp %>%
+      dplyr::left_join(df.area, by="id") %>%
+      dplyr::mutate(emission.wperm2 = value * 0.000277778 / 8760 / area.m2) %>%
+      {.}
+  }
+  heat.by.grid.annual.comp
+}
+
+get.monthly.data <- function(time.pref, spatial.suf, df.area=NULL) {
+  heat.by.grid.monthly = readr::read_csv(sprintf("aggregated_heat/%s%s_monthly.csv", time.pref, spatial.suf))
+  heat.by.grid.monthly.comp = heat.by.grid.monthly %>%
+    dplyr::mutate(emission.GJ = value * 1e-9) %>%
+    dplyr::mutate(emission.mwh = emission.GJ * 0.277778) %>%
+    {.}
+  if (!is.null(df.area)) {
+    hours.in.month = tibble::tibble(month=sprintf("%02d", 1:12), hours=c(31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31) * 24)
+    heat.by.grid.monthly.comp <- heat.by.grid.monthly.comp %>%
+      dplyr::left_join(df.area, by="id") %>%
+      dplyr::left_join(hours.in.month, by="month") %>%
+      dplyr::mutate(emission.wperm2 = value * 0.000277778 / hours / area.m2) %>%
+      {.}
+  }
+  heat.by.grid.monthly.comp
+}
+
+get.df.to.plot <- function(heat.by.grid.annual.comp, grid.geo=NULL, res="annual") {
+  if (res == "annual") {
+    heat.by.grid.annual = heat.by.grid.annual.comp %>%
+      dplyr::group_by(id) %>%
+      dplyr::summarise_if(is.numeric, sum) %>%
+      dplyr::ungroup()
+  } else if (res == "monthly") {
+    heat.by.grid.annual = heat.by.grid.annual.comp %>%
+      dplyr::group_by(id, month) %>%
+      dplyr::summarise_if(is.numeric, sum) %>%
+      dplyr::ungroup()
+  }
+  if (is.null(grid.geo)) {
+    to.plot.ann.total <- heat.by.grid.annual
+    to.plot.ann.component <- heat.by.grid.annual.comp
+  } else {
+    to.plot.ann.total <- heat.by.grid.annual %>%
+      dplyr::left_join(grid.geo, by="id") %>%
+      sf::st_as_sf() %>%
+      {.}
+    to.plot.ann.component <- heat.by.grid.annual.comp %>%
+      dplyr::left_join(grid.geo, by="id") %>%
+      sf::st_as_sf() %>%
+      {.}
+  }
+  list(to.plot.ann.total, to.plot.ann.component)
+}
+
+get.grid.size.m2 <- function(spatial.level) {
+  if (spatial.level == "finer") {
+    return(500^2)
+  } else {
+    return(12000^2)
+  }
+}
+
+get.grid.size.from.geometry <- function(grid.geo) {
+  grid.geo$area.m2 <- sf::st_area(grid.geo)
+  grid.no.geo <- grid.geo
+  sf::st_geometry(grid.no.geo) <- NULL
+  grid.no.geo <- grid.no.geo %>%
+    tibble::as_tibble() %>%
+    dplyr::mutate(area.m2 = as.numeric(area.m2)) %>%
+    dplyr::select(id, area.m2)
+  grid.no.geo
+}
+
+
+la.boundary = sf::st_read("domain/la-county-boundary.geojson")
+la.boundary.valid = sf::st_make_valid(la.boundary)
+```
+
+```{r finerGridLevel, message=FALSE}
+result = get.spatial.path.suf("tract")
+spatial.path = result[[1]]
+spatial.suf = result[[2]]
+spatial.label = result[[3]]
+grid.geo <- sf::st_read(sprintf("%s/tl_2018_06_tract.shp", spatial.path)) %>%
+  dplyr::filter(COUNTYFP=="037") %>%
+  dplyr::select(GEOID) %>%
+  dplyr::rename(id = GEOID) %>%
+  {.}
+
+df.area <- get.grid.size.from.geometry(grid.geo)
+
+heat.by.grid.annual.comp = get.annual.data(time.pref="annual_2018", spatial.suf=spatial.suf, df.area)
+
+## check grid size
+## points <- tibble::tibble(lat = c(33.097332, 33.101246), lon = c(-118.65224, -118.65334))
+## points.geo <- sf::st_as_sf(points, coords=c("lon", "lat"))
+## line = sf::st_sfc(sf::st_linestring(rbind(c(-118.65224, 33.097332), c(-118.65334, 33.101246))), crs=4326)
+## sf::st_length(line)
+
+result = get.df.to.plot(heat.by.grid.annual.comp, grid.geo)
+to.plot.ann.total = result[[1]]
+to.plot.ann.component = result[[2]]
+
+heat.by.grid.annual.comp %>%
+  dplyr::group_by(variable) %>%
+  dplyr::summarise_at(vars(emission.wperm2),
+                      tibble::lst(min, "Q1"=~quantile(., probs = 0.25), mean,
+                                  median, "Q3"=~quantile(., probs = 0.75),
+                                  max)) %>%
+  dplyr::ungroup() %>%
+  knitr::kable(caption = "Census Tract Annual Heat Emission Summary Statistics (W/m2)", digits = 3)
+```
+
+```{r annHeatTotal, message=FALSE, fig.width=15, fig.height=7}
+tm_shape(to.plot.ann.total) +
+  tm_polygons(col="emission.wperm2", n=8, style="quantile", midpoint=0, palette="seq", border.alpha = 0) +
+  tm_layout(main.title = "2018 Annual Heat Emission (W/m2)",
+            legend.position=c("left", "bottom"), legend.outside=FALSE,
+            aes.palette = list(seq = "-RdYlGn")) +
+  tm_shape(la.boundary.valid) +
+  tm_polygons("CITY", alpha=0, legend.show=FALSE)
+```
+
+The spatial distribution of total heat emissions for the five components.
+
+```{r annHeatByComponent, message=FALSE, fig.width=15, fig.height=10}
+tm_shape(to.plot.ann.component) +
+  tm_polygons(col="emission.wperm2", n=8, style="quantile", midpoint=0, palette="seq", border.alpha = 0) +
+  tm_facets(by="variable", ncol=3) +
+  tm_layout(main.title = "Annual Heat Emission of the Five Component (W/m2)",
+            legend.position=c("left", "bottom"), legend.outside=FALSE,
+            aes.palette = list(seq = "-RdYlGn")) +
+  tm_shape(la.boundary.valid) +
+  tm_polygons("CITY", alpha=0, legend.show=FALSE)
+```
+
+# Monthly Profile
+
+```{r monthly, message=FALSE, fig.width=15, fig.height=7}
+
+heat.by.grid.monthly.comp = get.monthly.data(time.pref="annual_2018", spatial.suf=spatial.suf, df.area)
+
+result = get.df.to.plot(heat.by.grid.monthly.comp, grid.geo=NULL, res = "monthly")
+to.plot.monthly.total = result[[1]]
+to.plot.monthly.component = result[[2]]
+
+monthly.avg.emission <- to.plot.monthly.total %>%
+  dplyr::mutate(month = as.numeric(month)) %>%
+  dplyr::group_by(month) %>%
+  dplyr::summarise_if(is.numeric, mean) %>%
+  dplyr::ungroup() %>%
+  {.}
+
+monthly.avg.emission %>%
+  ggplot2::ggplot(ggplot2::aes(x = month, y = emission.wperm2)) +
+  ggplot2::geom_point() +
+  ggplot2::geom_line() +
+  ggplot2::ggtitle(sprintf("Monthly Total Heat Emission Averaged Across %s", spatial.label)) +
+  ggplot2::theme()
+```
+
+The average heat emission from building surfaces remain the largest across most months of the year except for January and December. Surface heat emission peaks in May, while HVAC rejection heat emission peaks in July. Heat emission from exfiltration do not exhibit much seasonality and remain pretty steady across all months while there are some dips in the summer months for the average zong exhaust air heat loss and the HVAC relief air heat loss.
+
+```{r monthlyAvg, message=FALSE, fig.width=15, fig.height=7}
+monthly.avg.emission.component <- to.plot.monthly.component %>%
+  dplyr::mutate(month = as.numeric(month)) %>%
+  dplyr::group_by(month, variable) %>%
+  dplyr::summarise_if(is.numeric, mean) %>%
+  dplyr::ungroup() %>%
+  {.}
+
+monthly.avg.emission.component %>%
+  ggplot2::ggplot(ggplot2::aes(x = month, y = emission.wperm2, color=variable)) +
+  ggplot2::geom_point() +
+  ggplot2::geom_line() +
+  ggplot2::ggtitle(sprintf("Monthly Heat Emission Component Averaged Across %s", spatial.label)) +
+  ggplot2::theme()
+```
+
+The following plot shows the January and July total heat emission
+```{r monthlyTotal, message=FALSE, fig.width=15, fig.height=12}
+jan.jul.monthly.avg.emission.component <- heat.by.grid.monthly.comp %>%
+  dplyr::filter(month %in% c("01", "07")) %>%
+  {.}
+
+result = get.df.to.plot(jan.jul.monthly.avg.emission.component, grid.geo=grid.geo, res="monthly")
+to.plot.jan.jul.total = result[[1]]
+to.plot.jan.jul.component = result[[2]]
+
+tm_shape(to.plot.jan.jul.total) +
+  tm_polygons(col="emission.wperm2", n=8, style="quantile", midpoint=0, palette="seq", border.alpha = 0) +
+  tm_facets(by="month") +
+  tm_layout(main.title = "Jan and July Heat Emission (W/m2)",
+            legend.position=c("left", "bottom"), legend.outside=FALSE,
+            aes.palette = list(seq = "-RdYlGn")) +
+  tm_shape(la.boundary.valid) +
+  tm_polygons("CITY", alpha=0, legend.show=FALSE)
+```
+
+The following plot shows the January and July total heat emission for different components
+
+```{r monthlyComp, message=FALSE, fig.width=15, fig.height=35}
+tm_shape(to.plot.jan.jul.component) +
+  tm_polygons(col="emission.wperm2", n=8, style="quantile", midpoint=0, palette="seq", border.alpha = 0) +
+  tm_facets(by=c("variable", "month")) +
+  tm_layout(main.title = "Jan and July Heat Emission",
+            legend.position=c("left", "bottom"), legend.outside=FALSE,
+            aes.palette = list(seq = "-RdYlGn")) +
+  tm_shape(la.boundary.valid) +
+  tm_polygons("CITY", alpha=0, legend.show=FALSE)
+```

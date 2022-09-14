@@ -1,0 +1,307 @@
+---
+title: "2018 heat emission from EnergyPlus simulation at finer grid level normalized by grid size, check outlier"
+author: "Yujie Xu"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE)
+knitr::opts_knit$set(root.dir = "~/Dropbox/workLBNL/EESA/code/im3-wrf/")
+```
+
+## Diurnal Profile
+
+```{r helpers, message=FALSE}
+library("dplyr")
+library("tmap")
+
+get.spatial.path.suf <- function(spatial.level) {
+  if (spatial.level == "coarse") {
+    spatial.path = "M02_EnergyPlus_Forcing_Historical_LowRes/meta"
+    spatial.suf = ""
+  } else if (spatial.level == "finer") {
+    spatial.path = "high res grid for reporting"
+    spatial.suf = "_finer"
+  } else if (spatial.level == "tract") {
+    spatial.path = "domain/tl_2018_06_tract"
+    ## spatial.path = "domain"
+    spatial.suf = "_tract"
+  }
+  list(spatial.path, spatial.suf)
+}
+
+get.grid.size.m2 <- function(spatial.level) {
+  if (spatial.level == "finer") {
+    return(500^2)
+  } else {
+    return(12000^2)
+  }
+}
+
+get.grid.size.from.geometry <- function(grid.geo) {
+  grid.geo$area.m2 <- sf::st_area(grid.geo)
+  grid.no.geo <- grid.geo
+  sf::st_geometry(grid.no.geo) <- NULL
+  grid.no.geo <- grid.no.geo %>%
+    tibble::as_tibble() %>%
+    dplyr::mutate(area.m2 = as.numeric(area.m2)) %>%
+    dplyr::select(id, area.m2)
+  grid.no.geo
+}
+
+```
+
+```{r typicalDayProfile, message=FALSE}
+time.pref = "annual_2018"
+result = get.spatial.path.suf("finer")
+spatial.path = result[[1]]
+spatial.suf = result[[2]]
+grid.size = get.grid.size.m2("finer")
+
+get.file.list <- function(date.str, time.pref, spatial.suf) {
+  files = list.files(sprintf("aggregated_heat/%s%s", time.pref, spatial.suf), sprintf("^%s  ", date.str))
+}
+
+summer.weekend.day = "07_07"
+summer.week.day = "07_11"
+winter.weekend.day = "01_13"
+winter.week.day = "01_17"
+
+files <- lapply(c(summer.weekend.day, summer.week.day, winter.weekend.day, winter.week.day), function(day) {
+  get.file.list(day, time.pref, spatial.suf)
+}) %>%
+  unlist()
+
+summer.winter.data <- lapply(files, function(f) {
+  df <- readr::read_csv(sprintf("aggregated_heat/%s%s/%s", time.pref, spatial.suf, f), col_types = readr::cols())
+  df
+}) %>%
+  dplyr::bind_rows()
+
+grid.geo <- sf::st_read(sprintf("%s/wrf-grids-origin.geojson", spatial.path))
+
+df.area <- get.grid.size.from.geometry(grid.geo)
+
+to.plot.daily <- summer.winter.data %>%
+  tidyr::separate(`Date/Time`, into = c("Date", "Hour"), sep = "  ") %>%
+  dplyr::mutate(Hour = as.integer(gsub(":00:00", "", Hour)) - 1) %>%
+  dplyr::mutate(day.status = ifelse(Date %in% gsub("_", "/", c(summer.week.day, winter.week.day)), "weekday", "weekend")) %>%
+  dplyr::mutate(season.status = ifelse(Date %in% gsub("_", "/", c(summer.week.day, summer.weekend.day)), "summer", "winter")) %>%
+  dplyr::left_join(df.area, by="id") %>%
+  ## convert unit from J to W/m2
+  dplyr::mutate(value = value * 0.000277778 / area.m2) %>%
+  {.}
+
+to.plot.daily.total <- to.plot.daily %>%
+  dplyr::group_by(Date, day.status, season.status, Hour, id) %>%
+  dplyr::summarise(value = sum(value)) %>%
+  dplyr::ungroup()
+```
+The following are the definition of heat emission components.
+
+```{r variableDef}
+tibble::tibble(
+          `variable` = c("emission.exfiltration", "emission.exhaust", "emission.ref", "emission.rej", "emission.surf"),
+          `EnergyPlus output` = c(
+            "Environment:Site Total Zone Exfiltration Heat Loss \\[W/m2](Hourly)"
+          , "Environment:Site Total Zone Exhaust Air Heat Loss \\[W/m2](Hourly)"
+          , "SimHVAC:Air System Relief Air Total Heat Loss Energy \\[W/m2](Hourly)"
+          , "SimHVAC:HVAC System Total Heat Rejection Energy \\[W/m2](Hourly)",
+            "Environment:Site Total Surface Heat Emission to Air \\[W/m2](Hourly)")
+        ) %>%
+  knitr::kable(format="html") %>%
+  kableExtra::kable_styling(bootstrap_options = "striped", full_width = F, position = "left")
+```
+
+The following shows the daily heat emission in the original scale. We can see a lot of large outliers. This indicates a large variability across different grid cells (500m x 500m).
+
+```{r plotDaily, message=FALSE, fig.width=15}
+to.plot.daily.total %>%
+  dplyr::mutate(Hour = factor(Hour)) %>%
+  ggplot2::ggplot(ggplot2::aes(Hour, value)) +
+  ggplot2::geom_boxplot(outlier.size = 0.5) +
+  ggplot2::facet_grid(season.status~day.status) +
+  ggplot2::ggtitle("Total heat emission daily profile for typical summer and winter days") +
+  ggplot2::ylab("Heat Emission (W/m2)") +
+  ggplot2::theme()
+```
+
+```{r plotSolarRad, message=FALSE, fig.width=15}
+climate.data.path = "annual_WRF/M02_EnergyPlus_Forcing_Historical_LowRes_ann_2018"
+## all grids using the same solar radiation data
+solar.rad.grid.65 <- readr::read_csv(sprintf("%s/grids_csv/65.csv", climate.data.path)) %>%
+  dplyr::select(mon:solar.rad) %>%
+  dplyr::group_by(mon, hour) %>%
+  dplyr::summarise(solar.rad = mean(solar.rad)) %>%
+  dplyr::ungroup() %>%
+  {.}
+
+solar.rad.grid.65 %>%
+  dplyr::mutate(month = factor(mon)) %>%
+  ggplot2::ggplot(ggplot2::aes(x = hour, y = solar.rad, color = month, group = month)) +
+  ggplot2::geom_point(size = 0.5) +
+  ggplot2::geom_line() +
+  ggplot2::ggtitle("Solar Radiation at center of LA county (coarse grid 64)") +
+  ggplot2::ylab("Heat Emission (W/m2)") +
+  ggplot2::theme()
+```
+
+The ones with larger than 100W/m2 hourly solar radiation during day time (9am to 4pm) concentrated on grid cells with heavy, light manufacturing facilities and warehouses.
+
+```{r checkOutlier, message=FALSE, fig.width=15}
+large.thresh.day = 100
+grids.day.with.large.emission <- to.plot.daily.total %>%
+  ## dplyr::mutate(Hour = factor(Hour)) %>%
+  dplyr::filter(season.status == "winter") %>%
+  dplyr::filter(8 < Hour, Hour < 17) %>%
+  dplyr::filter(value > large.thresh.day) %>%
+  dplyr::distinct(id) %>%
+  {.}
+
+building.info <- readr::read_csv("building_info_finer.csv")
+
+building.info %>%
+  dplyr::inner_join(grids.day.with.large.emission, by="id") %>%
+  dplyr::group_by(building.type, vintage) %>%
+  dplyr::summarise(building.area.m2 = sum(building.area.m2)) %>%
+  dplyr::ungroup() %>%
+  dplyr::arrange(desc(building.area.m2)) %>%
+  knitr::kable(format="html") %>%
+  kableExtra::kable_styling(bootstrap_options = "striped", full_width = F, position = "left")
+```
+
+The ones with night time heat emission greater than 50W/m2 are also mainly from heavy and light manufacturing (the top 6 in total area among the grid cells with large night time heat emission).
+
+```{r checkOutlierNight, message=FALSE}
+large.thresh.night = 50
+grids.night.with.large.emission <- to.plot.daily.total %>%
+  ## dplyr::mutate(Hour = factor(Hour)) %>%
+  dplyr::filter(season.status == "winter") %>%
+  dplyr::filter((Hour <= 8) | (Hour >= 17)) %>%
+  dplyr::filter(value > large.thresh.night) %>%
+  dplyr::distinct(id) %>%
+  {.}
+
+building.info %>%
+  dplyr::inner_join(grids.night.with.large.emission, by="id") %>%
+  dplyr::group_by(building.type, vintage) %>%
+  dplyr::summarise(building.area.m2 = sum(building.area.m2)) %>%
+  dplyr::ungroup() %>%
+  dplyr::arrange(desc(building.area.m2)) %>%
+  knitr::kable(format="html") %>%
+  kableExtra::kable_styling(bootstrap_options = "striped", full_width = F, position = "left")
+```
+
+```{r annualSim, message=FALSE}
+df.sim.result <- readr::read_csv("annual_sim_result_by_idf_epw_2018.csv")
+
+annual.sim.result <- df.sim.result %>%
+  dplyr::group_by(idf.kw, epw.id) %>%
+  dplyr::summarise_if(is.numeric, sum) %>%
+  dplyr::ungroup() %>%
+  {.}
+
+df.area.prototype = readr::read_csv("prototype_bldg_area.csv") %>%
+  dplyr::mutate(idf.kw = gsub(".idf", "", idf.name, fixed=TRUE)) %>%
+  dplyr::mutate(idf.kw = gsub(".", "_", idf.kw, fixed=TRUE)) %>%
+  dplyr::select(-idf.name) %>%
+  {.}
+
+annual.sim.energy <- annual.sim.result %>%
+  dplyr::select(idf.kw, epw.id, energy.overall)
+
+annual.sim.EUI <- annual.sim.result %>%
+  dplyr::left_join(df.area.prototype, by="idf.kw") %>%
+  dplyr::mutate(EUI.kbtu.per.sqft = energy.overall * 1e-9 * 947.817 / (prototype.m2 * 10.7639)) %>%
+  dplyr::mutate(EUI.GJ.per.m2 = energy.overall * 1e-9 / prototype.m2) %>%
+  dplyr::mutate(emission.GJ.per.m2 = emission.add.surf * 1e-9 / prototype.m2) %>%
+  {.}
+```
+
+The building with highest annual heat emission per building area are heavy manufacturing and
+full service restaurant. They also have high energy use intensity.
+
+```{r meanEUI, message=FALSE, fig.width=15, fig.height = 15}
+annual.sim.EUI.avg <- annual.sim.EUI %>%
+  dplyr::select(-epw.id) %>%
+  dplyr::group_by(idf.kw) %>%
+  dplyr::summarise_if(is.numeric, mean) %>%
+  dplyr::ungroup() %>%
+  dplyr::select(idf.kw, EUI.GJ.per.m2, emission.GJ.per.m2) %>%
+  tidyr::gather(variable, value, ends_with("per.m2"))
+
+annual.sim.EUI.avg %>%
+  dplyr::mutate_at(vars(variable), recode, "EUI.GJ.per.m2"="Annual Electricity + Gas GJ/m2",
+                   "emission.GJ.per.m2"="Annual Heat Emission GJ/m2") %>%
+  ggplot2::ggplot(ggplot2::aes(x = reorder(idf.kw, value), y=value, fill=variable)) +
+  ggplot2::geom_bar(stat = "identity", position = "dodge") +
+  ggplot2::scale_fill_grey(start=0.8, end=0.2) +
+  ggplot2::ylab("EnergyPlus input file") +
+  ggplot2::xlab("Annual heat emission or energy consumption (GJ/m2)") +
+  ggplot2::coord_flip() +
+  ggplot2::theme_bw()
+```
+
+```{r distributionEUI, message=FALSE, fig.width=15, fig.height=12}
+annual.sim.EUI %>%
+  dplyr::select(idf.kw, epw.id, EUI.GJ.per.m2, emission.GJ.per.m2) %>%
+  tidyr::gather(variable, value, ends_with("per.m2")) %>%
+  dplyr::mutate_at(vars(variable), recode, "EUI.GJ.per.m2"="Annual Electricity + Gas GJ/m2",
+                   "emission.GJ.per.m2"="Annual Heat Emission GJ/m2") %>%
+  ggplot2::ggplot(ggplot2::aes(x = reorder(idf.kw, value), y = value)) +
+  ggplot2::geom_boxplot(outlier.size=0.5) +
+  ggplot2::coord_flip() +
+  ggplot2::ggtitle("Distribution of EnergyPlus total energy and total heat emission across different weather inputs") +
+  ggplot2::ylab("EnergyPlus input file") +
+  ggplot2::xlab("Annual heat emission or energy consumption (GJ/m2)") +
+  ggplot2::facet_wrap(.~variable) +
+  ggplot2::theme()
+```
+
+The ratio is computed for each idf-epw combination. The plot shows the average
+across all different weather inputs. Single-family, multi-family, warehouse, and
+small office have the largest heat-to-energy ratio. Even if the manufacturing
+facility is adapted from warehouse model, they don't have the same high
+heat-to-energy ratio as warehouse.
+
+```{r euiHeatRatio, message=FALSE, fig.width=15, fig.height=12}
+heat.eui.ratio <- annual.sim.EUI %>%
+  dplyr::select(idf.kw, epw.id, ends_with("per.m2")) %>%
+  dplyr::mutate(heat.over.energy = emission.GJ.per.m2 / EUI.GJ.per.m2) %>%
+  {.}
+heat.eui.ratio.avg <- heat.eui.ratio %>%
+  dplyr::group_by(idf.kw) %>%
+  dplyr::summarise_if(is.numeric, mean) %>%
+  dplyr::ungroup() %>%
+  {.}
+
+heat.eui.ratio.avg %>%
+  ggplot2::ggplot(ggplot2::aes(x = reorder(idf.kw, heat.over.energy),
+                               y = heat.over.energy,
+                               label = sprintf("%0.1f", heat.over.energy))) +
+  ggplot2::geom_bar(stat="identity") +
+  ggplot2::coord_flip() +
+  ggplot2::geom_hline(yintercept = 1.0) +
+  ggplot2::ggtitle("Ratio of heat emission over energy consumption") +
+  ggplot2::xlab("EnergyPlus input file") +
+  ggplot2::ylab("heat emission divided by energy consumption") +
+  ggplot2::geom_text(hjust=-0.5) +
+  ggplot2::theme()
+```
+
+The ratio has pretty large variability for single family and warehouses.
+Although some of the low variability might be hidden from the fact that some
+building types don't exist in some grid cells.
+
+```{r euiHeatRatioDistribution, message=FALSE, fig.width=15, fig.height=12}
+heat.eui.ratio %>%
+  ggplot2::ggplot(ggplot2::aes(x = reorder(idf.kw, heat.over.energy),
+                               y = heat.over.energy)) +
+  ggplot2::geom_boxplot(outlier.size = 0.5) +
+  ggplot2::ggtitle("Distribution of ratio of heat emission over energy consumption") +
+  ggplot2::xlab("EnergyPlus input file") +
+  ggplot2::ylab("heat emission divided by energy consumption") +
+  ggplot2::coord_flip() +
+  ggplot2::theme()
+```

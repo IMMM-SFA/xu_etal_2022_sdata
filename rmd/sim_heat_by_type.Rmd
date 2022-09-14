@@ -1,0 +1,176 @@
+---
+title: "2018 heat emission from EnergyPlus simulation"
+author: "Yujie Xu"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE)
+knitr::opts_knit$set(root.dir = "~/Dropbox/workLBNL/EESA/code/im3-wrf/")
+```
+```{r dygraph, message=FALSE}
+library("dplyr")
+
+df.sim.result <- readr::read_csv("annual_sim_result_by_idf_epw_2018.csv")
+
+annual.sim.result <- df.sim.result %>%
+  dplyr::group_by(idf.kw, epw.id) %>%
+  dplyr::summarise_if(is.numeric, sum) %>%
+  dplyr::ungroup() %>%
+  {.}
+
+result.by.type <- annual.sim.result %>%
+  dplyr::group_by(idf.kw) %>%
+  dplyr::group_split() %>%
+  {.}
+
+df = result.by.type[[1]] %>%
+  tidyr::separate(`Date/Time`, into = c("date", "hour"), sep="  ") %>%
+  dplyr::mutate(hour = as.numeric(gsub(":00:00", "", hour)) - 1) %>%
+  dplyr::mutate(timestamp = sprintf("2018/%s %02d:00:00", date, hour)) %>%
+  dplyr::mutate(timestamp.pox = as.POSIXct(timestamp, format="%Y/%m/%d %H:%M:%S")) %>%
+  dplyr::filter(!is.na(timestamp.pox)) %>%
+  {.}
+
+heat.surf.xts = xts::xts(df$emission.surf, order.by=df$timestamp.pox)
+heat.rej.xts = xts::xts(df$emission.rej, order.by=df$timestamp.pox)
+heat.exfiltration.xts = xts::xts(df$emission.exfiltration, order.by=df$timestamp.pox)
+heat.exhaust.xts = xts::xts(df$emission.exhaust, order.by=df$timestamp.pox)
+heat.ref.xts = xts::xts(df$emission.ref, order.by=df$timestamp.pox)
+
+dygraphs::dygraph(cbind(heat.exhaust.xts, heat.exfiltration.xts),
+                  ## dygraphs::dygraph(cbind(heat.rej.xts, heat.exhaust.xts, heat.exfiltration.xts, heat.ref.xts),
+                  main=sprintf("%s Heat Emission (excluding surface emission)", df$idf.kw[[1]])) %>%
+  dygraphs::dyOptions(colors = RColorBrewer::brewer.pal(4, "Set2"))
+```
+
+```{r annualSim, message=FALSE}
+
+df.area.prototype = readr::read_csv("prototype_bldg_area.csv") %>%
+  dplyr::mutate(idf.kw = gsub(".idf", "", idf.name, fixed=TRUE)) %>%
+  dplyr::mutate(idf.kw = gsub(".", "_", idf.kw, fixed=TRUE)) %>%
+  dplyr::select(-idf.name) %>%
+  {.}
+
+annual.sim.energy <- annual.sim.result %>%
+  dplyr::select(idf.kw, epw.id, energy.overall)
+
+annual.sim.EUI <- annual.sim.result %>%
+  dplyr::left_join(df.area.prototype, by="idf.kw") %>%
+  dplyr::mutate(EUI.kbtu.per.sqft = energy.overall * 1e-9 * 947.817 / (prototype.m2 * 10.7639)) %>%
+  dplyr::mutate(EUI.GJ.per.m2 = energy.overall * 1e-9 / prototype.m2) %>%
+  dplyr::mutate(emission.GJ.per.m2 = emission.add.surf * 1e-9 / prototype.m2) %>%
+  {.}
+```
+
+The building with highest annual heat emission per building area are heavy manufacturing and
+full service restaurant. They also have high energy use intensity.
+
+```{r meanEUI, message=FALSE, fig.width=15, fig.height = 15}
+idf.kw.to.usetype <- readr::read_csv("idf_kw_to_EnergyAtlas_usetype.csv") %>%
+  dplyr::mutate_at(vars(usetype), recode, "res_total"="residential") %>%
+  {.}
+
+annual.sim.EUI.avg <- annual.sim.EUI %>%
+  dplyr::select(-epw.id) %>%
+  dplyr::group_by(idf.kw) %>%
+  dplyr::summarise_if(is.numeric, mean) %>%
+  dplyr::ungroup() %>%
+  dplyr::select(idf.kw, EUI.GJ.per.m2, emission.GJ.per.m2) %>%
+  tidyr::gather(variable, value, ends_with("per.m2"))
+
+annual.sim.EUI.avg %>%
+  dplyr::left_join(idf.kw.to.usetype, by="idf.kw") %>%
+  dplyr::mutate_at(vars(variable), recode, "EUI.GJ.per.m2"="Annual Electricity + Gas GJ/m2",
+                   "emission.GJ.per.m2"="Annual Heat Emission GJ/m2") %>%
+  ggplot2::ggplot(ggplot2::aes(x = reorder(idf.kw, value), y=value, fill=interaction(variable, usetype))) +
+  ggplot2::geom_bar(stat = "identity", position = "dodge") +
+  ## ggplot2::scale_fill_grey(start=0.8, end=0.2) +
+  ggplot2::scale_fill_brewer(palette = "Paired", direction=-1) +
+  ggplot2::xlab("EnergyPlus input file") +
+  ggplot2::ylab("Annual heat emission or energy consumption (GJ/m2)") +
+  ggplot2::coord_flip() +
+  ggplot2::theme_bw()
+```
+
+```{r distributionEUI, message=FALSE, fig.width=15, fig.height=12}
+annual.sim.EUI %>%
+  dplyr::select(idf.kw, epw.id, EUI.GJ.per.m2, emission.GJ.per.m2) %>%
+  tidyr::gather(variable, value, ends_with("per.m2")) %>%
+  dplyr::mutate_at(vars(variable), recode, "EUI.GJ.per.m2"="Annual Electricity + Gas GJ/m2",
+                   "emission.GJ.per.m2"="Annual Heat Emission GJ/m2") %>%
+  ggplot2::ggplot(ggplot2::aes(x = reorder(idf.kw, value), y = value)) +
+  ggplot2::geom_boxplot(outlier.size=0.5) +
+  ggplot2::coord_flip() +
+  ggplot2::ggtitle("Distribution of EnergyPlus total energy and total heat emission across different weather inputs") +
+  ggplot2::ylab("EnergyPlus input file") +
+  ggplot2::xlab("Annual heat emission or energy consumption (GJ/m2)") +
+  ggplot2::facet_wrap(.~variable) +
+  ggplot2::theme()
+```
+
+```{r distributionEUI, message=FALSE, fig.width=15, fig.height=12}
+annual.sim.EUI %>%
+  dplyr::select(idf.kw, epw.id, EUI.GJ.per.m2, emission.GJ.per.m2) %>%
+  tidyr::gather(variable, value, ends_with("per.m2")) %>%
+  dplyr::mutate_at(vars(variable), recode, "EUI.GJ.per.m2"="Annual Electricity + Gas GJ/m2",
+                   "emission.GJ.per.m2"="Annual Heat Emission GJ/m2") %>%
+  ggplot2::ggplot(ggplot2::aes(x = reorder(idf.kw, value), y = value)) +
+  ggplot2::geom_boxplot(outlier.size=0.5) +
+  ggplot2::coord_flip() +
+  ggplot2::ggtitle("Distribution of EnergyPlus total energy and total heat emission across different weather inputs") +
+  ggplot2::ylab("EnergyPlus input file") +
+  ggplot2::xlab("Annual heat emission or energy consumption (GJ/m2)") +
+  ggplot2::facet_wrap(.~variable) +
+  ggplot2::theme()
+```
+
+The ratio is computed for each idf-epw combination. The plot shows the average
+across all different weather inputs. Single-family, multi-family, warehouse, and
+small office have the largest heat-to-energy ratio. Even if the manufacturing
+facility is adapted from warehouse model, they don't have the same high
+heat-to-energy ratio as warehouse.
+
+```{r euiHeatRatio, message=FALSE, fig.width=15, fig.height=12}
+heat.eui.ratio <- annual.sim.EUI %>%
+  dplyr::select(idf.kw, epw.id, ends_with("per.m2")) %>%
+  dplyr::mutate(heat.over.energy = emission.GJ.per.m2 / EUI.GJ.per.m2) %>%
+  {.}
+heat.eui.ratio.avg <- heat.eui.ratio %>%
+  dplyr::group_by(idf.kw) %>%
+  dplyr::summarise_if(is.numeric, mean) %>%
+  dplyr::ungroup() %>%
+  {.}
+
+heat.eui.ratio.avg %>%
+  dplyr::left_join(idf.kw.to.usetype, by="idf.kw") %>%
+  ggplot2::ggplot(ggplot2::aes(x = reorder(idf.kw, heat.over.energy),
+                               y = heat.over.energy,
+                               label = sprintf("%0.1f", heat.over.energy), fill=usetype)) +
+  ggplot2::geom_bar(stat="identity") +
+  ggplot2::coord_flip() +
+  ggplot2::geom_hline(yintercept = 1.0) +
+  ggplot2::ggtitle("Ratio of heat emission over energy consumption") +
+  ggplot2::xlab("EnergyPlus input file") +
+  ggplot2::ylab("heat emission divided by energy consumption") +
+  ggplot2::scale_fill_manual(values = rev(RColorBrewer::brewer.pal(name="Paired", n=8))[c(1, 3, 5, 7)]) +
+  ggplot2::geom_text(hjust=-0.5) +
+  ggplot2::theme()
+```
+
+The ratio has pretty large variability for single family and warehouses.
+Although some of the low variability might be hidden from the fact that some
+building types don't exist in some grid cells.
+
+```{r euiHeatRatioDistribution, message=FALSE, fig.width=15, fig.height=12}
+heat.eui.ratio %>%
+  ggplot2::ggplot(ggplot2::aes(x = reorder(idf.kw, heat.over.energy),
+                               y = heat.over.energy)) +
+  ggplot2::geom_boxplot(outlier.size = 0.5) +
+  ggplot2::ggtitle("Distribution of ratio of heat emission over energy consumption") +
+  ggplot2::xlab("EnergyPlus input file") +
+  ggplot2::ylab("heat emission divided by energy consumption") +
+  ggplot2::coord_flip() +
+  ggplot2::theme()
+```
