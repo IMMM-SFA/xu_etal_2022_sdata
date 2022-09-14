@@ -7,32 +7,49 @@ output: html_document
 
 ```{r setup, include=FALSE, message=FALSE}
 knitr::opts_chunk$set(echo = FALSE)
-knitr::opts_knit$set(root.dir = "~/Dropbox/workLBNL/EESA/code/im3-wrf/")
+knitr::opts_knit$set(root.dir = "../")
 ```
 
 ```{r readAndJoin}
 library("sf")
 library("dplyr")
-run.read.data = FALSE
+
+run.read.data = TRUE
+grid.level = "coarse"
+## grid.level = "finer"
 sf::sf_use_s2(FALSE)
 
+input.path = "input_data"
+output.path = "intermediate_data"
+year = 2018
+
+if (grid.level == "coarse") {
+  grid.path = sprintf("%s/annual_WRF/M02_EnergyPlus_Forcing_Historical_LowRes_ann_%s/meta", input.path, year)
+  output.name = sprintf("%s/building_to_wrf_grid.geojson", output.path)
+  suf = ""
+} else {
+  grid.path = sprintf("%s/high res grid for reporting", input.path)
+  output.name = sprintf("%s/building_to_finer_wrf_grid.geojson", output.path)
+  suf = "_finer"
+}
+
 if (run.read.data) {
-    df <- sf::st_read("~/Dropbox/workLBNL/CityBES/LA/data-raw/compiled_LA_building.geojson")
+    df <- sf::st_read(sprintf("%s/compiled_LA_building.geojson", output.path))
     df.centroid <- sf::st_centroid(df)
-    df.grid <- sf::st_read("M02_EnergyPlus_Forcing_Historical_LowRes/meta/wrf-grids-origin.geojson")
+    df.grid <- sf::st_read(sprintf("%s/wrf-grids-origin.geojson", grid.path))
     df.join <- df.grid %>%
         sf::st_join(df.centroid, join=sf::st_contains) %>%
         dplyr::filter(!is.na(OBJECTID)) %>%
         {.}
     df.join %>%
-        sf::st_write("building_to_wrf_grid.geojson")
+        sf::st_write(output.name)
 } else {
-    df <- sf::st_read("~/Dropbox/workLBNL/CityBES/LA/data-raw/compiled_LA_building.geojson")
-    df.grid <- sf::st_read("M02_EnergyPlus_Forcing_Historical_LowRes/meta/wrf-grids-origin.geojson")
-    df.join = sf::st_read("building_to_wrf_grid.geojson")
+    df <- sf::st_read(sprintf("%s/compiled_LA_building.geojson", output.path))
+    df.grid <- sf::st_read(sprintf("%s/wrf-grids-origin.geojson", grid.path))
+    df.join = sf::st_read(output.name)
 }
 
-la.boundary <- sf::read_sf("domain/la-county-boundary.geojson")
+la.boundary <- sf::read_sf(sprintf("%s/domain/la-county-boundary.geojson", input.path))
 ## verify ones not joined in qgis
 ## not.joined <- df %>%
 ##     dplyr::filter(!(OBJECTID %in% df.join$OBJECTID)) %>%
@@ -55,13 +72,25 @@ df.grid %>%
 
 Compare building footprint and building size documented in the data set shows the majority of buildings have more larger building footprint area than the total building size. Thus, we cannot use footprint x number-of-stories to compute building size as in phase 1.
 
-```{r compareFootprintAndSize}
+```{r compareFootprintAndSize, fig.show="hold"}
 footprint.size <- df %>%
   sf::st_area()
 df$FootprintArea = as.vector(footprint.size) * 10.76
 
 df.no.geom <- df
 sf::st_geometry(df.no.geom) <- NULL
+
+df.no.geom %>%
+  tibble::as_tibble() %>%
+  dplyr::group_by(GeneralUseType, SpecificUseType) %>%
+  dplyr::summarise(total.building.size.sqft = sum(SQFTmain), mean.EffectiveYearBuilt = mean(EffectiveYearBuilt)) %>%
+  dplyr::ungroup() %>%
+  dplyr::arrange(desc(total.building.size.sqft)) %>%
+  dplyr::ungroup() %>%
+  dplyr::mutate(building.size.percent = total.building.size.sqft / sum(total.building.size.sqft) * 100) %>%
+  readr::write_csv(sprintf("%s/summary/size_year_by_type_LA_building.csv", output.path)) %>%
+  {.}
+
 df.no.geom %>%
   dplyr::mutate(footprint.larger.than.SQFTmain = (FootprintArea > SQFTmain)) %>%
   dplyr::select(footprint.larger.than.SQFTmain) %>%
@@ -137,11 +166,14 @@ tibble::tibble(steps = c("Before joining",
 The following buildings do not have corresponding EnergyPlus prototype model, thus are removed from the analysis.
 
 ```{r removeUnmodelledType}
+
 join.has.building %>%
-    filter((remap.EP.ref.building == "?") | (remap.EP.ref.building == "parking")) %>%
-    distinct(GeneralUseType, SpecificUseType) %>%
-    arrange(GeneralUseType, SpecificUseType) %>%
-    knitr::kable()
+  filter((remap.EP.ref.building == "?") | (remap.EP.ref.building == "parking")) %>%
+  dplyr::group_by(GeneralUseType, SpecificUseType) %>%
+  dplyr::summarise(building.count = n(), total.size.sqft = sum(SQFTmain)) %>%
+  dplyr::ungroup() %>%
+  arrange(GeneralUseType, SpecificUseType) %>%
+  knitr::kable()
 ```
 
 Use the following assumed ceiling height to sub-divide building types sub-categories following Phase 1 approach.
@@ -168,7 +200,7 @@ join.type.divide <- join.has.building.filter %>%
                   TRUE ~ remap.EP.ref.building)) %>%
   {.}
 
-map.to.idf.name <- readr::read_csv("type_vintage_to_idf_mapping.csv") %>%
+map.to.idf.name <- readr::read_csv(sprintf("%s/type_vintage_to_idf_mapping.csv", input.path)) %>%
   dplyr::select(-building.count) %>%
   dplyr::mutate_at(vars(building.type), recode, "large retail"="retail", "small retail"="retail",
                    "large restaurant"="full service restaurant", "small restaurant"="full service restaurant") %>%
@@ -176,9 +208,10 @@ map.to.idf.name <- readr::read_csv("type_vintage_to_idf_mapping.csv") %>%
 
 map.to.idf.name %>%
   distinct(idf.name) %>%
-  readr::write_csv("unique_idf_used.csv")
+  na.omit() %>%
+  readr::write_csv(sprintf("%s/unique_idf_used%s.csv", output.path, suf))
 
-idf.source = readr::read_csv("unique_idf_used_with_source.csv")
+idf.source = readr::read_csv(sprintf("%s/unique_idf_used_with_source.csv", input.path))
 
 map.to.idf.name <- map.to.idf.name %>%
   dplyr::left_join(idf.source, by="idf.name")
@@ -212,10 +245,19 @@ all.building.count.to.prototype.with.source <- df.no.geom %>%
   {.}
 
 all.building.count.to.prototype.with.source %>%
-  readr::write_csv("all_building_count_to_prototype_with_source.csv")
+  readr::write_csv(sprintf("%s/all_building_count_to_prototype_with_source%s.csv", output.path, suf))
 ```
 
 ```{r summaryStats}
+join.type.divide %>%
+  dplyr::select(OBJECTID, HEIGHT, EffectiveYearBuilt, SQFTmain) %>%
+  {.}
+
+  dplyr::summarise_if(is.numeric, tibble::lst(min, mean, ))
+  summary()
+
+  {.}
+
 join.type.divide.numeric.summary <- join.type.divide %>%
   dplyr::select(id, OBJECTID, SQFTmain, EffectiveYearBuilt, HEIGHT, num.floor) %>%
   tidyr::gather(variable, value, SQFTmain:num.floor) %>%
@@ -232,7 +274,7 @@ join.type.divide.numeric.summary <- join.type.divide %>%
   {.}
 
 join.type.divide.numeric.summary %>%
-  readr::write_csv("summary/numeric_field_stats_per_grid.csv")
+  readr::write_csv(sprintf("%s/summary/numeric_field_stats_per_grid%s.csv", output.path, suf))
 ```
 
 ```{r summaryByMedian}
@@ -244,7 +286,7 @@ join.type.divide.numeric.summary %>%
                                   "Q1"=~quantile(probs=0.25, na.rm=TRUE, .),
                                   "median"=~median(., na.rm = TRUE),
                                   "mean"=~mean(., na.rm=TRUE),
-                                  "Q3"=~quantile(probs=0.25, na.rm=TRUE, .),
+                                  "Q3"=~quantile(probs=0.75, na.rm=TRUE, .),
                                   "max"=~max(., na.rm = TRUE))) %>%
   dplyr::ungroup() %>%
   knitr::kable(caption = "Summary of the median of grid cell values")
@@ -276,8 +318,9 @@ join.type.divide.type.vin.cnt <- join.type.divide %>%
                                     EffectiveYearBuilt < 2009 ~ "1981-2008 (2004)",
                                     TRUE ~ "after 2008 (2013)")) %>%
   {.}
+
 join.type.divide.type.vin.cnt %>%
-  readr::write_csv("compiled_cell_building.csv")
+  readr::write_csv(sprintf("%s/compiled_cell_building%s.csv", output.path, suf))
 
 join.type.divide.type.vin.cnt %>%
     head() %>%
@@ -290,7 +333,8 @@ The following grid cells have valid building information.
 cell.with.building <- join.type.divide.type.vin.cnt %>%
   distinct(id) %>%
   {.}
-df.grid %>%
+
+p <- df.grid %>%
   dplyr::mutate(centroid = as.character(centroid)) %>%
   tidyr::separate(centroid, into=c("a", "lon", "lat", "b"), sep="[(),]") %>%
   dplyr::mutate(lat = gsub(" ", "", lat)) %>%
@@ -298,9 +342,13 @@ df.grid %>%
   dplyr::inner_join(cell.with.building, by="id") %>%
   ggplot2::ggplot() +
   ggplot2::geom_sf() +
-  ggplot2::geom_text(ggplot2::aes(x=lon, y=lat, label=id), color="red") +
   ggplot2::ggtitle("Grid with valid buildings") +
   ggplot2::theme_bw()
+if (grid.level == "coarse") {
+  p <- p +
+    ggplot2::geom_text(ggplot2::aes(x=lon, y=lat, label=id), color="red")
+}
+print(p)
 ```
 
 ```{r allcode}
@@ -326,5 +374,5 @@ join.type.divide.type.vin.cnt %>%
   dplyr::group_by(id, building.type, vintage) %>%
   dplyr::summarise(building.count = n()) %>%
   dplyr::ungroup() %>%
-  readr::write_csv("summary/building_type_vintage_count_per_grid.csv")
+  readr::write_csv(sprintf("%s/summary/building_type_vintage_count_per_grid%s.csv", output.path, suf))
 ```
