@@ -7,27 +7,21 @@ library("dplyr")
 library("tibble")
 
 ## set work folder to be inside "code"
-setwd("code")
+## setwd("code")
 
-## had some parsing failure in HouseFraction. This column is not used, so should be fine
-df = readr::read_csv("input_data/Assessor_Parcels_Data_-_2019.csv")
-
-df %>%
-  dplyr::mutate_if(is.character, as.factor) %>%
-  summary()
-
-df.select.col <- df %>%
-  dplyr::select(AssessorID, GeneralUseType, SpecificUseType, SQFTmain, YearBuilt, EffectiveYearBuilt, CENTER_LAT, CENTER_LON) %>%
-  {.}
-
-df.select.col %>%
-  readr::write_csv("intermediate_data/Assessor_Parcels_Data_-_2019_col_subset.csv")
-
-## can load this smaller data file when not run the first time
-## df.select.col <- readr::read_csv("intermediate_data/Assessor_Parcels_Data_-_2019_col_subset.csv")
-
-df.select.col %>%
-  summary()
+## read building characteristics starts -------------------------------------------
+if (!file.exists("intermediate_data/Assessor_Parcels_Data_-_2019_col_subset.csv")) {
+    ## had some parsing failure in HouseFraction. This column is not used, so should be fine
+    df = readr::read_csv("input_data/Assessor_Parcels_Data_-_2019.csv")
+    df.select.col <- df %>%
+        dplyr::select(AssessorID, GeneralUseType, SpecificUseType, SQFTmain, YearBuilt, EffectiveYearBuilt, CENTER_LAT, CENTER_LON) %>%
+        {.}
+    df.select.col %>%
+        readr::write_csv("intermediate_data/Assessor_Parcels_Data_-_2019_col_subset.csv")
+} else {
+    ## can load this smaller data file when not run the first time
+    df.select.col <- readr::read_csv("intermediate_data/Assessor_Parcels_Data_-_2019_col_subset.csv")
+}
 
 ## invalid building size
 df.select.col %>%
@@ -42,8 +36,9 @@ df.select.col %>%
 df.select.col.geo <- df.select.col %>%
   dplyr::filter(!is.na(CENTER_LON)) %>%
   sf::st_as_sf(coords=c("CENTER_LON", "CENTER_LAT"), crs=4326)
+## read building characteristics ends  -------------------------------------------
 
-df.geo <- sf::st_read("../input_data/LARIAC6_LA_County.geojson")
+df.geo <- sf::st_read("input_data/LARIAC6_LA_County.geojson")
 
 df.geo %>%
   nrow()
@@ -56,18 +51,12 @@ df.geo.nogeom %>%
   dplyr::mutate_if(is.character, as.factor) %>%
   summary()
 
-df.geo.nogeom %>%
-  dplyr::filter(BLD_ID == 201404851590000)
-
 df.geo.valid <- sf::st_make_valid(df.geo)
-
-## [329812] Loop 0 is not valid: Edge 10 crosses edge 13.
-df.geo.valid.round2 <- sf::st_make_valid(df.geo.valid %>% dplyr::slice(329812))
 
 df.select.col.geo.valid <- sf::st_make_valid(df.select.col.geo)
 
-df.join <- sf::st_join(df.geo.valid %>%
-                       dplyr::slice(1:329811, 329813:3293177),
+## one geometry has invalid shape, taken out of the spatial join
+df.join <- sf::st_join(df.geo.valid %>% dplyr::slice(1:329811, 329813:3293177),
                        df.select.col.geo.valid, join=sf::st_contains)
 
 head(df.join)
@@ -83,15 +72,19 @@ df.join.nogeom.sel.col <- df.join.nogeom %>%
   {.}
 
 df.join.nogeom.sel.col %>%
-  ## dplyr::distinct(OBJECTID)
   dplyr::distinct(AssessorID)
 
+df.join.nogeom.sel.col %>%
+  dplyr::distinct(OBJECTID)
+
+## one polygon to many assessor point
 df.join.nogeom.sel.col %>%
   dplyr::group_by(OBJECTID) %>%
   dplyr::filter(n()>1) %>%
   dplyr::ungroup() %>%
   dplyr::distinct(OBJECTID)
 
+## one assessor point to many polygon
 df.join.nogeom.sel.col %>%
   dplyr::group_by(AssessorID) %>%
   dplyr::filter(n()>1) %>%
@@ -107,6 +100,7 @@ join.unique <- df.join.nogeom.sel.col %>%
   dplyr::ungroup() %>%
   {.}
 
+## one footprint matched to multiple accessor data points
 df.join.nogeom.sel.col.one.many <- df.join.nogeom.sel.col %>%
   dplyr::group_by(OBJECTID) %>%
   dplyr::filter(n()>1) %>%
@@ -115,16 +109,16 @@ df.join.nogeom.sel.col.one.many <- df.join.nogeom.sel.col %>%
 df.join.nogeom.sel.col.one.many %>%
   distinct(OBJECTID)
 
-df.join.nogeom.sel.col.one.many.clean <-
-  df.join.nogeom.sel.col.one.many %>%
+df.join.nogeom.sel.col.one.many.clean <- df.join.nogeom.sel.col.one.many %>%
   dplyr::filter(EffectiveYearBuilt > 0) %>%
   dplyr::filter(SQFTmain > 0) %>%
+  dplyr::filter(GeneralUseType != "(missing)") %>%
   {.}
 
 df.one.many.nontype <- df.join.nogeom.sel.col.one.many.clean %>%
   dplyr::group_by(OBJECTID) %>%
   dplyr::summarise(HEIGHT = mean(HEIGHT),
-                   EffectiveYearBuilt = max(EffectiveYearBuilt ),
+                   EffectiveYearBuilt = max(EffectiveYearBuilt),
                    SQFTmain = mean(SQFTmain)) %>%
   dplyr::ungroup() %>%
   {.}
@@ -173,9 +167,21 @@ df.clean <- join.unique %>%
   {.}
 
 df.clean %>%
+    distinct(OBJECTID)
+
+df.clean %>%
   dplyr::mutate_at(vars(OBJECTID, GeneralUseType, SpecificUseType), as.factor) %>%
   summary() %>%
   {.}
+
+df.clean %>%
+    dplyr::select(OBJECTID, HEIGHT, EffectiveYearBuilt, SQFTmain) %>%
+    tidyr::gather(variable, value, -OBJECTID) %>%
+    na.omit() %>%
+    dplyr::group_by(variable) %>%
+    dplyr::summarise_at(vars(value), tibble::lst(min, Q1=~quantile(., probs=0.25), median, mean, Q3=~quantile(., probs=0.75), max)) %>%
+    dplyr::ungroup() %>%
+    readr::write_csv("paper_table/LA_building_geojson_summary.csv")
 
 df.clean %>%
   dplyr::group_by(GeneralUseType, SpecificUseType) %>%
@@ -185,7 +191,7 @@ df.clean %>%
 
 ## join df.clean with building geometry or centroid
 
-df.type.recode = readr::read_csv("building_type_recode.csv") %>%
+df.type.recode = readr::read_csv("input_data/building_type_recode.csv") %>%
   dplyr::mutate(`remap EP ref building` = ifelse(is.na(`remap EP ref building`), SpecificUseType, `remap EP ref building`)) %>%
   {.}
 
@@ -196,4 +202,4 @@ df.geo.compile <- df.geo %>%
   {.}
 
 df.geo.compile %>%
-  sf::st_write("output_data/compiled_LA_building.geojson")
+  sf::st_write("intermediate_data/compiled_LA_building.geojson")
