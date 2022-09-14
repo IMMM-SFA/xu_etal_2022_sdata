@@ -199,6 +199,7 @@ libs/
 *.suo
 # Output
 output/output*
+
 # R
 .Rhistory
 R/batchrunner/*.pdf
@@ -208,7 +209,7 @@ R/batchrunner/*.csv
 .RData
 inst/doc
 vignettes/rsconnect
-
+*.html
 
 # vignette caches
 /vignettes/*_cache
