@@ -227,6 +227,9 @@ intermediate_data/
 # Data Files
 *.csv
 
+# word files
+*.docx
+
 # temp files
 \#*#
 .\#*
