@@ -1,0 +1,2 @@
+building_type_recode.csv has "Manufactured Home Park" marked as single-family homes. Need to take it out from the simulation
+
