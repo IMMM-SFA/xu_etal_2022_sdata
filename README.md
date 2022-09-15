@@ -57,12 +57,26 @@ Following the steps to reproduce the analysis
    number of stories, and footprint area using the geometry and assessor data
    files from the Dropbox folder "City Data/LA".
 2. Acquire WRF climate data (in a 12 km x 12 km grid system)
-3. Convert the WRF climate data of the historic forcing (2018 July) to epw. In
-   this conversion, the UTC time in WRF needs to be converted to local time in
-   epw. We can use one representative grid in LA to compute the solar irradiance
-   data using the excel tool. This irradiance data will be used in epw files of
-   all grids, assuming there are little solar irradiance variations within the
-   LA county. This corresponds to the “2_wrf_to_csv_epw” code on Github.
+3. Convert the WRF climate data of the historic forcing to epw. 
+  1. Untar the "M02_EnergyPlus_Forcing_Historical_LowRes*" folder. This creates a folder <A> to hold all the files from the tar ball
+  2. Run 0_mv_inputs.py to create folder structure and move files to corresponding folders. "forcing_folder" is set to be where the WRF data is extracted, i.e. <A> from above.
+  3. Copy the "USA_CA_Los.Angeles.Intl.AP.722950_TMY3.epw" into folder <A>
+  4. Run 2_wrf_to_epw.py to before this line. Note that the WRF_FOLDER at the beginning should be set to <A> as well. 
+  df_wrf_data = pd.read_csv(os.path.join(WRF_FOLDER, 'time_series', 'LA-SOLAR.csv'), sep=',', encoding='UTF-8')
+  5. Get solar radiation input with get_solar_input.R. This creates a file "LA-SWDOWN_input_to_excel.csv" in the <a>/time_series folder. The file looks like this
+  6. Open the file and copy data to the excel tool Los_Angeles_TMY_2010s Solar
+     irradiance.xlsx. Note that for leap year, we should not copy in the Feb 29
+     data, as the excel tool won't accept that. Also due to UTC to local time
+     conversion, there is a time shift, the UTC time 2018 does not cover the
+     whole local time 2018. We’ll use the year-end data of the previous year to
+     fill in for the missing hours of the current end of year. Then paste the W,
+     X, Y column in sheet "Output – Isotropic sky" to
+     "LA-SWDOWN_input_to_excel.csv". For Feb 29 data, paste it in the "input"
+     sheet in place of Feb 28, then get the output three solar component of Feb
+     28 from "Output – Isotropic sky", and paste them in the Feb 29 slots in the
+     csv. Change the column names of the three solar component to ”sw_normal",
+     "sw_dif", and "sw_dir". Save the csv file as LA-SOLAR.csv
+  7. Go back to 2_wrf_to_epw.py, now the previous line should run through and read in solar data to df_wrf_data.
 4. Assign the nearest grid point to each building. The epw files for the
    assigned grid point will be used in the simulation of the target building.
 5. For each building type-vintage combination in each grid cell, simulate the
