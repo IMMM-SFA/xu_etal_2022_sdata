@@ -3,7 +3,7 @@ library("readxl")
 
 source("approx-cdf.R")
 
-df.sqft <- readxl::read_excel("MECS/Table9_1.xlsx", skip=15,
+df.sqft <- readxl::read_excel("input_data/MECS/Table9_1.xlsx", skip=15,
                      col_names=c("NAICS Code", "Subsector and Industry",
                        "area million sqft",
                                  "num establishments",
@@ -13,14 +13,14 @@ df.sqft <- readxl::read_excel("MECS/Table9_1.xlsx", skip=15,
   dplyr::mutate_at(vars(`area million sqft`:`mean num of buildings per establishment`), as.numeric) %>%
   {.}
 
-df.energy <- readxl::read_excel("MECS/Table1_2.xlsx", skip=13
-                   , col_names=c("NAICS Code", "Subsector and Industry",
-                                 "Total", "Net Electricity",
-                                 "Residual Fuel Oil", "Distillate Fuel Oil",
-                                 "Natural Gas",
-                                 "HGL (excluding natural gasoline)", "Coal",
-                                 "Coke and Breeze", "Other",
-                                 "Shipments of Energy Sources Produced Onsite")) %>%
+df.energy <- readxl::read_excel("input_data/MECS/Table1_2.xlsx", skip=13,
+                                col_names=c("NAICS Code", "Subsector and Industry",
+                                            "Total", "Net Electricity",
+                                            "Residual Fuel Oil", "Distillate Fuel Oil",
+                                            "Natural Gas",
+                                            "HGL (excluding natural gasoline)", "Coal",
+                                            "Coke and Breeze", "Other",
+                                            "Shipments of Energy Sources Produced Onsite")) %>%
   dplyr::slice(c(1:82, 85)) %>%
   {.}
 
@@ -34,8 +34,8 @@ df.energy %>%
   ggplot2::coord_polar("y", start=0) +
   ggplot2::theme_void() +
   ggplot2::scale_fill_brewer(palette = "Set1") +
-  ggplot2::ggtitle("Total consumption by fuel")
-ggplot2::ggsave("images/consumption_pie.png", width=7, height=4)
+  ggplot2::ggtitle("MECS Total consumption by fuel")
+ggplot2::ggsave("figures/consumption_pie.png", width=7, height=4)
 
 ## join energy and sqft
 df.energy.wide <- df.energy %>%
@@ -55,7 +55,7 @@ df.energy.intensity <- df.sqft %>%
 
 df.energy.intensity %>%
   dplyr::select(fuel, `NAICS Code`, `Subsector and Industry`, tBtu, `area million sqft`, Btu.per.sqft, `num establishments`) %>%
-  readr::write_csv("MECS/energy_intensity_per_type.csv")
+  readr::write_csv("intermediate_data/MECS/energy_intensity_per_type.csv")
 
 df.elec <- df.energy.intensity %>%
   dplyr::filter(fuel == "Net Electricity") %>%
@@ -249,32 +249,7 @@ plot(approx_cdf_type7_maybe(df.elec$Btu.per.sqft, df.elec$`num establishments`))
   geom_vline(aes(xintercept=weighted.quantile, colour=method, linetype=method),
              elec.75.comparison)
 
-weighted_quantile_type1(x = df.elec$Btu.per.sqft,
-                        w = df.elec$`num establishments`,
-                        probs=c(0.25, 0.75), na.rm = TRUE)
-## [1]  81045.75 264887.06       kBtu/sqft
-
+## Final choice: weighted quantile via replicate data points, using type 7 quantile.
 weighted_quantile_via_rep(x = df.elec$Btu.per.sqft, w = df.elec$`num establishments`, probs = c(0.25, 0.75), type=7L)
 
 weighted_quantile_via_rep(x = df.gas$Btu.per.sqft, w = df.gas$`num establishments`, probs = c(0.25, 0.75), type=7L)
-
-## type 7 quantile
-wquantile(x = df.elec$Btu.per.sqft, probs = c(0.25, 0.75), weights = df.elec$`num establishments`)
-## [1]  81045.75 216794.15
-
-## Harrell-Davis quantile estimator
-whdquantile(x = df.elec$Btu.per.sqft, probs = c(0.25, 0.75), weights = df.elec$`num establishments`)
-## [1]  82673.53 241553.82
-
-weighted_quantile_type1(x = df.gas$Btu.per.sqft,
-                        w = df.gas$`num establishments`,
-                        probs=c(0.25, 0.75), na.rm = TRUE)
-## [1]  76452.6 194945.8         kBtu/sqft
-
-## type 7 quantile
-wquantile(x = df.gas$Btu.per.sqft, probs = c(0.25, 0.75), weights = df.gas$`num establishments`)
-## [1]  76983.87 264856.85
-
-## Harrell-Davis quantile estimator
-whdquantile(x = df.gas$Btu.per.sqft, probs = c(0.25, 0.75), weights = df.gas$`num establishments`)
-## [1]  73370.62 498939.92
