@@ -28,6 +28,16 @@ from.file <- "input_data/LA Prototypes/Res (CBES)/bldg_13_vin_8_cz_6/model.idf"
 to.file <- "intermediate_data/idf_to_modify/MultiFamily-2013.idf"
 file.copy(from=from.file, to=to.file)
 
+from.file <- "input_data/LA Prototypes/Res (CBES)/bldg_11_vin_1_cz_6/model.idf"
+to.file <- "intermediate_data/idf_to_modify/SingleFamily-pre-1980.idf"
+file.copy(from=from.file, to=to.file)
+from.file <- "input_data/LA Prototypes/Res (CBES)/bldg_11_vin_5_cz_6/model.idf"
+to.file <- "intermediate_data/idf_to_modify/SingleFamily-2004.idf"
+file.copy(from=from.file, to=to.file)
+from.file <- "input_data/LA Prototypes/Res (CBES)/bldg_11_vin_8_cz_6/model.idf"
+to.file <- "intermediate_data/idf_to_modify/SingleFamily-2013.idf"
+file.copy(from=from.file, to=to.file)
+
 from.file <- "input_data/LA Prototypes/NursingHome mod sched autosize/NursingHome_baseline-SanFrancisco.idf"
 to.file <- "intermediate_data/idf_to_modify/NursingHome_baseline-SanFrancisco.idf"
 file.copy(from=from.file, to=to.file)
