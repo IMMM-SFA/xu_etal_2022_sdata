@@ -4,14 +4,9 @@
 # In[3]:
 
 
-import os, sys, csv, json, re
+import os
 import parseidf
 import glob
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
-get_ipython().run_line_magic('matplotlib', 'inline')
 
 
 # ## Write Baseline IDF
