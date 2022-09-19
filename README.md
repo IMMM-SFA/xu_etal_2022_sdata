@@ -37,6 +37,10 @@ LA buildings
 Climate
 - WRF climate data (in a 12 km x 12 km grid system): from Pouya
 
+Prototype Building Models
+
+- Lookup tables to remap types between assessor data, prototype building models, and Energy Atlas building types in verification
+
 ### Output data
 grid level data heat emission data: fixme add
 
@@ -58,12 +62,19 @@ Following the steps to reproduce the analysis
    files from the Dropbox folder "City Data/LA".
 2. Acquire WRF climate data (in a 12 km x 12 km grid system)
 3. Convert the WRF climate data of the historic forcing to epw. 
-    1. Untar the "M02_EnergyPlus_Forcing_Historical_LowRes*" folder. This creates a folder <A> to hold all the files from the tar ball
-    2. Run 0_mv_inputs.py to create folder structure and move files to corresponding folders. "forcing_folder" is set to be where the WRF data is extracted, i.e. <A> from above.
+    1. Untar the "M02_EnergyPlus_Forcing_Historical_LowRes*" folder. This
+       creates a folder <A> to hold all the files from the tar ball
+    2. Run 0_mv_inputs.py to create folder structure and move files to
+       corresponding folders. "forcing_folder" is set to be where the WRF data
+       is extracted, i.e. <A> from above.
     3. Copy the "USA_CA_Los.Angeles.Intl.AP.722950_TMY3.epw" into folder <A>
-    4. Run 2_wrf_to_epw.py to before this line. Note that the WRF_FOLDER at the beginning should be set to <A> as well. 
-    df_wrf_data = pd.read_csv(os.path.join(WRF_FOLDER, 'time_series', 'LA-SOLAR.csv'), sep=',', encoding='UTF-8')
-    5. Get solar radiation input with get_solar_input.R. This creates a file "LA-SWDOWN_input_to_excel.csv" in the <a>/time_series folder. The file looks like this
+    4. Run 2_wrf_to_epw.py to before this line. Note that the WRF_FOLDER at the
+    beginning should be set to <A> as well. df_wrf_data =
+    pd.read_csv(os.path.join(WRF_FOLDER, 'time_series', 'LA-SOLAR.csv'),
+    sep=',', encoding='UTF-8')
+    5. Get solar radiation input with get_solar_input.R. This creates a file
+       "LA-SWDOWN_input_to_excel.csv" in the <a>/time_series folder. The file
+       looks like this
     6. Open the file and copy data to the excel tool Los_Angeles_TMY_2010s Solar
      irradiance.xlsx. Note that for leap year, we should not copy in the Feb 29
      data, as the excel tool won't accept that. Also due to UTC to local time
@@ -74,9 +85,10 @@ Following the steps to reproduce the analysis
      "LA-SWDOWN_input_to_excel.csv". For Feb 29 data, paste it in the "input"
      sheet in place of Feb 28, then get the output three solar component of Feb
      28 from "Output – Isotropic sky", and paste them in the Feb 29 slots in the
-     csv. Change the column names of the three solar component to ”sw_normal",
+     csv. Change the column names of the three solar component to "sw_normal",
      "sw_dif", and "sw_dir". Save the csv file as LA-SOLAR.csv
-    7. Go back to 2_wrf_to_epw.py, now the previous line should run through and read in solar data to df_wrf_data.
+    7. Go back to 2_wrf_to_epw.py, now the previous line should run through and
+       read in solar data to df_wrf_data.
 4. Assign the nearest grid point to each building. The epw files for the
    assigned grid point will be used in the simulation of the target building.
 5. For each building type-vintage combination in each grid cell, simulate the
@@ -87,9 +99,27 @@ Following the steps to reproduce the analysis
    [im3 repo from Xuan](https://github.com/LBNL-ETA/im3-wrf/blob/main/3_write_baseline_idf.ipynb) to
    create EnergyPlus models.
 7. Adjust prototype models
-- Change the design condition
-- Remove un-used dependencies from files
-- Update model version
+    - Change the design condition, using 3_idf_preprocess.R. The script first
+      copies the idf files from input_data/annual_WRF into
+      intermediate_data/idf_to_modify, then change the design day and location
+      of the idf files then output them to
+      intermediate_data/idf_change_design_day
+    - Add run period and output variables using 3_write_baseline_idf.py: takes
+      idf from intermediate_data/idf_change_design_day and add runperiod and
+      output variables, outputs to intermediate_data/idf_add_sim_period_output
+    - Remove un-used dependencies from files: 3_replace_schedule_csv_path.R
+    - Create heavy and light manufacturing facility models by adjusting the
+      electric and gas equipment to match the EUI of the MECS 75th and 25th
+      percentile
+      - retrieve the 25th and 75th percentile using get_manufacturing_energy_stats.R
+      - adjust the model electricity and gas equipment using 3_get_manufacturing_idf.R
+    - Update model version using idfVersionUpdater.exe
+    - fix errors in the Religious model by running 3_fix_religious.R. The
+      original model have some errors of missing objects and wrong value for the
+      start day in the RunPeriod object.
+    - fix a field in nursing home model using 3_correct_nursingHome.R
+    - change the year and "Day of Week for Start Day" in the RunPeriod object to
+      match the actual simulation year
 8. Use run_sim.py to run simulations
 9. Validation with measured and other data source: fixme: add rmd
 10. Produce grid-level heat emission data.
