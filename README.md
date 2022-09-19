@@ -30,19 +30,64 @@ to be added
 ## Data reference
 
 ### Input data
-LA buildings
-- LA building charateristics: Assessor_Parcels_Data_-_2019.csv, from Dropbox
-- LA building geometry: LARIAC6_LA_County.geojson
-
-Climate
-- WRF climate data (in a 12 km x 12 km grid system): from Pouya
-
-Prototype Building Models
-
-- Lookup tables to remap types between assessor data, prototype building models, and Energy Atlas building types in verification
+Held in the input_data folder, including the external data files referenced downstream in the analysis
+- LA buildings
+    - LA building characteristics: Assessor_Parcels_Data_-_2019.csv, from Dropbox
+    - LA building geometry: LARIAC6_LA_County.geojson
+- Climate
+    - Annual WRF data: held in annual_WRF in a 12km x 12km grid system. The two
+      .tar files are original data from Pouya. The tar balls contain weather
+      data in the following format: Variable_<variable_name>_<timestamp>.txt and
+      grid latitude longitude data (Fixed_XLAT.txt, Fixed_XLONG.txt) The
+      annual_WRF/M02_EnergyPlus_Forcing_Historical_LowRes_ann_<year> folders
+      holds the grid weather data for each variable in separate folders (GLW,
+      PSFC, Q2, RH, SWDOWN, T2, WINDD, WINDS). The grids_csv holds weather data
+      compiled for each grid cell, time_series holds weather data for each WRF
+      variable. The wrf_epw folder contains the .epw files for each grid cell.
+      These epw files are used in the heat and energy simulation.
+    - July WRF data: held in M02_EnergyPlus_Forcing_Historical_LowRes. The
+      folder structure is similar to the
+      annual_WRF/M02_EnergyPlus_Forcing_Historical_LowRes_ann_<year> folders
+    - WRF grid latitude longitude for two resolutions, 
+        - coarse grid:
+          M02_EnergyPlus_Forcing_Historical_LowRes/meta/wrf-grids-origin.geojson.
+          This grid corresponds to the epw files used in EnergyPlus simulations.
+        - fine grid: high res grid for reporting/wrf-grids-origin.geojson. This
+          grid system is used in reporting
+        - census tract: domain/tl_2018_06_tract/tl_2018_06_tract.shp. This is
+          used in reporting.
+- Prototype Building Models: held in folder "LA Prototypes"
+    - commercial buildings: most commercial building models are held in Com
+      (OS_Standards). The Com need mod folder contains models for Religious
+      buildings in different climate zones. The study uses the one corresponding
+      to 3B. "​​NursingHome source" contains the nursing home models from
+      https://www.sciencedirect.com/science/article/pii/S0360132320302018?casa_token=Ct-JsOrSNeYAAAAA:LVadWomEMGB-oGf3A69HCkAzhKZpeKZJ78kjKuKlcQpuFzki2By9JRU7azPgErbZhjk-y10iOg#fig4.
+      The blackout incident is removed and the systems are changed to autosize.
+      The adjusted model is in "NursingHome mod sched autosize"
+    - residential buildings: held in "Res (CBES)" folder. "bldg_11" are
+      single-family buildings. "building_13" are multi-family buildings. "vin_1"
+      is pre-1980. "vin_5" is 2004 and "vin_8" is 2013. ""es_schedule" contains
+      the schedule files used in residential models.
+- Lookup tables to re-map types between assessor data, prototype building
+  models, and Energy Atlas building types in verification
+    - building_type_recode.csv maps the building types in
+      Assessor_Parcels_Data_-_2019.csv and EnergyPlus prototype building type
+    - type_vintage_to_idf_mapping.csv maps building type and vintage to the idf
+      file used to simulate the building
+- MECS survey tables are held in "MECS" folder. It is used for extracting
+  summary statistics to model heavy and light manufacturing facilities
+- Energy Atlas: annual electricity and gas consumption. "usage_bld_kwh.csv" is
+  electricity data. "usage_bld_therm.csv" is gas data. "usage_bld_btu.csv" is
+  electricity + gas data.
 
 ### Output data
-grid level data heat emission data: fixme add
+simulation results for prototype-building-wrf-grid-combination
+lookup table from building to grids and census tracts
+aggregated heat emission data
+- finer grid 450 x 450m
+- coarser grid 12km x 12km
+- census tract
+aggregated energy data
 
 ## Contributing modeling software
 | Model | Version | Repository Link | DOI |
@@ -111,8 +156,8 @@ Following the steps to reproduce the analysis
     - Create heavy and light manufacturing facility models by adjusting the
       electric and gas equipment to match the EUI of the MECS 75th and 25th
       percentile
-      - retrieve the 25th and 75th percentile using get_manufacturing_energy_stats.R
-      - adjust the model electricity and gas equipment using 3_get_manufacturing_idf.R
+        - retrieve the 25th and 75th percentile using get_manufacturing_energy_stats.R
+        - adjust the model electricity and gas equipment using 3_get_manufacturing_idf.R
     - Update model version using idfVersionUpdater.exe
     - fix errors in the Religious model by running 3_fix_religious.R. The
       original model have some errors of missing objects and wrong value for the
