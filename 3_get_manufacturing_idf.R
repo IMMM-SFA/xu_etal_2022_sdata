@@ -3,7 +3,7 @@ library("dplyr")
 files <- list.files("intermediate_data/idf_add_sim_period_output", pattern = "Warehouse-*")
 
 for (f in files) {
-    file.copy(sprintf("intermediate_data/idf_add_sim_period_output/%s", f),
+    file.copy(sprintf("intermediate_data/idf_add_sim_period_output_versionUpdate/%s", f),
               sprintf("intermediate_data/warehouse_model_modify/%s", f))
 }
 
@@ -70,3 +70,13 @@ adjust.elec.gas.equipment("Warehouse-DOE Ref Pre-1980-ASHRAE 169-2013-3B.idf",
 ## heavy	14535.29	10697.37	2013
 ## heavy	24165.84	10697.37	2004
 ## heavy	21666.97	10697.37	1980
+
+files = c(list.files("intermediate_data/warehouse_model_modify", pattern="LightManufacturing*"),
+          list.files("intermediate_data/warehouse_model_modify", pattern="HeavyManufacturing*"))
+
+files
+
+for (f in files) {
+    print(file.copy(sprintf("intermediate_data/warehouse_model_modify/%s", f),
+                    sprintf("intermediate_data/idf_add_sim_period_output_versionUpdate/%s", f)))
+}
