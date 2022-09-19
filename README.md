@@ -80,15 +80,76 @@ Held in the input_data folder, including the external data files referenced down
   electricity data. "usage_bld_therm.csv" is gas data. "usage_bld_btu.csv" is
   electricity + gas data.
 
-### Output data
-simulation results for prototype-building-wrf-grid-combination
-lookup table from building to grids and census tracts
-aggregated heat emission data
-- finer grid 450 x 450m
-- coarser grid 12km x 12km
-- census tract
-aggregated energy data
+### Intermediate data
+Held in the intermediate_data folder, including the data files in the intermediate data analysis or simulation steps
+- EnergyPlus input idf files in various processing stages
+    - idf_to_modify: input idfs in their original state
+    - idf_change_design_day: idf with design day and location changed to LA
+    - idf_add_sim_period_output: idf with RunPeriod adjusted to Jan. 1st to Dec. 31st and with heat emission and energy consumption outputs added
+    - warehouse_model_modify: warehouse models and light and heavy manufacturing facility models derived from them.
+- Summary statistics: held in "summary" folder
+- compiled MECS data: energy_intensity_per_type.csv, used in compiling the weighted quantile for manufacturing facilities 
+- epw_idf_to_simulate.csv: epw-idf combination to be simulated with EnergyPlus, referenced in run_sim.py
+- weather_2018.csv: data file that generates the figure "compiled_epw_weather.png"
 
+To be continued...
+
+### Output data
+
+- simulation results for prototype-building-wrf-grid-combination: held in
+  EP_output/result_ann_WRF_<year>, for 2016 and 2018: Each subfolder contains a
+  simulation output of a prototype model and WRF grid as follows <prototype
+  model key word>____<WRF grid ID>. The eplusout.csv in each subfolder holds the
+  hourly energy and heat emission results.
+- Building metadata: building_metadata.geojson file holds the type, vintage,
+building size, and centroid geometry of the compiled
+
+| Column name | Column definition |
+|-------------|-------------------|
+| OBJECTID | Unique building ID inherited from LARIAC6_LA_County.geojson |
+| GeneralUseType | Building type, inherited from Assessor_Parcels_Data_-_2019.csv |
+| SpecificUseType | Building type, inherited from Assessor_Parcels_Data_-_2019.csv |
+| EffectiveYearBuilt | Built year, inherited from Assessor_Parcels_Data_-_2019.csv |
+| building.type | Prototype building type |
+| vintage | Prototype building vintage |
+| idf | Prototype model filename used to simulate the building |
+| usetype | Corresponding EnergyAtlas usetype |
+| footprint.area | Total building footprint area [m2], inherited from SQFTMain column in Assessor_Parcels_Data_-_2019.csv |
+| building.size | Total building total floor area [m2] |
+| id.grid.coarse | The grid cell in the 12km x 12km grid system containing this building |
+| id.grid.finer | The grid cell in the 450m x 450m grid system containing this building |
+| id.tract | The census tract GEOID containing this building |
+| geometry | Point of building centroid |
+
+- aggregated heat emission and energy data for the three spatial resolutions. All three files have the same column structure.
+    - finer grid 450 x 450m
+    - coarser grid 12km x 12km
+    - census tract
+
+| Column name | Column definition |
+|-------------|-------------------|
+| GeoID | WRF grid ID or census tract GEOID. Use the geojson for the corresponding spatial resolution to look up the location and shape of the GeoID |
+| Timestamp | Hourly, local time of LA county. |
+| exf | Zone exfiltration heat loss [MJ] |
+| exh | Zone exhaust air heat loss [MJ] |
+| rej | HVAC system heat rejection [MJ] |
+| rel | HVAC system relief air heat loss [MJ] |
+| surf | Surface heat emission [MJ] |
+| emission.total | Total heat emission [MJ] |
+| elec | Total electricity consumption [MJ] |
+| gas | Total gas consumption [MJ] |
+| energy.total | Total electricity and gas consumption [MJ] |
+
+- Aggregated geographical data referenced in heat emission and energy consumption
+ 
+| Column name | Column definition |
+|-------------|-------------------|
+| GeoID | WRF grid ID or census tract GEOID |
+| geometry | Polygon shapes of the WRF grid points bounding box or census tracts |
+| area | Grid or census tract polygon size |
+| footprint.area | Total building footprint area [m2] |
+| building.size | Total building total floor area [m2] |
+    
 ## Contributing modeling software
 | Model | Version | Repository Link | DOI |
 |-------|---------|-----------------|-----|
