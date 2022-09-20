@@ -1,7 +1,5 @@
 ## copied in from CityBES/LA/data-raw/
 ## modified filepath to suit the current folder setting, added some comments
-## data files will be ignored and uploaded
-## fixme: run through and verify
 
 library("dplyr")
 library("tibble")
@@ -203,3 +201,18 @@ df.geo.compile <- df.geo %>%
 
 df.geo.compile %>%
   sf::st_write("intermediate_data/compiled_LA_building.geojson")
+
+## update the type recoding
+
+df.type.recode = readr::read_csv("input_data/building_type_recode.csv") %>%
+    dplyr::mutate(`remap EP ref building` = ifelse(is.na(`remap EP ref building`), SpecificUseType, `remap EP ref building`)) %>%
+    {.}
+
+df.geo.compile <- sf::st_read("intermediate_data/compiled_LA_building.geojson")
+
+file.rm("intermediate_data/compiled_LA_building.geojson")
+
+df.geo.compile %>%
+    dplyr::select(-starts_with("remap")) %>%
+    dplyr::left_join(df.type.recode, by=c("GeneralUseType", "SpecificUseType")) %>%
+    sf::st_write("intermediate_data/compiled_LA_building.geojson")
