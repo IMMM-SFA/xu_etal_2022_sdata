@@ -206,11 +206,12 @@ df.geo.compile %>%
 
 df.type.recode = readr::read_csv("input_data/building_type_recode.csv") %>%
     dplyr::mutate(`remap EP ref building` = ifelse(is.na(`remap EP ref building`), SpecificUseType, `remap EP ref building`)) %>%
+    dplyr::select(-count) %>%
     {.}
 
 df.geo.compile <- sf::st_read("intermediate_data/compiled_LA_building.geojson")
 
-file.rm("intermediate_data/compiled_LA_building.geojson")
+file.remove("intermediate_data/compiled_LA_building.geojson")
 
 df.geo.compile %>%
     dplyr::select(-starts_with("remap")) %>%
