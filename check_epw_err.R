@@ -6,7 +6,9 @@ source("read_epw.R")
 ## for july data
 ## climate.folder = "input_data/M02_EnergyPlus_Forcing_Historical_LowRes"
 ## for 2018 annual
-climate.folder = "input_data/annual_WRF/M02_EnergyPlus_Forcing_Historical_LowRes_ann_2018"
+## climate.folder = "input_data/annual_WRF/M02_EnergyPlus_Forcing_Historical_LowRes_ann_2018"
+## for 2016 annual
+climate.folder = "input_data/annual_WRF/M02_EnergyPlus_Forcing_Historical_LowRes_ann_2016"
 
 f.err = "78.epw"
 f.good = "79.epw"

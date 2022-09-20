@@ -195,8 +195,13 @@ Following the steps to reproduce the analysis
      "sw_dif", and "sw_dir". Save the csv file as LA-SOLAR.csv
     7. Go back to 2_wrf_to_epw.py, now the previous line should run through and
        read in solar data to df_wrf_data.
+    8. Check whether there are missing data in the generated .epw files using
+       check_epw_err.R. Missing values are most often in Dew Point. If there are
+       missing values, use fill_na_in_epw.R to fill the missing value with the
+       previous non-missing record.
 4. Assign the nearest grid point to each building. The epw files for the
    assigned grid point will be used in the simulation of the target building.
+   This is documented in the rmd/1_match_building_to_grid.Rmd file
 5. For each building type-vintage combination in each grid cell, simulate the
    historic forcing. There are xx possible prototype buildings and 3 possible
    vintages, but we will only simulate the type-vintage combination appearing in
