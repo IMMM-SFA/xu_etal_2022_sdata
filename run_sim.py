@@ -2,6 +2,7 @@ import os
 import shutil
 import sys
 import pandas as pd
+import glob
 from threading import Thread
 from time import sleep
 
@@ -13,7 +14,8 @@ RepoRoot = '/Applications/EnergyPlus-22-1-0'
 sys.path.insert(0, str(ProductsDir))
 from pyenergyplus.api import EnergyPlusAPI
 
-working_dir = os.path.join(os.getcwd(), "intermediate_data/idf_add_sim_period_output")
+working_dir = os.path.join(os.getcwd(), "intermediate_data/idf_to_sim_2018")
+# working_dir = os.path.join(os.getcwd(), "intermediate_data/idf_add_sim_period_output_versionUpdate")
 
 df = pd.read_csv("intermediate_data/epw_idf_to_simulate.csv")
 
@@ -32,6 +34,35 @@ dirname = "intermediate_data/EP_output/result_ann_WRF_2018"
 epw_path = "input_data/annual_WRF/M02_EnergyPlus_Forcing_Historical_LowRes_ann_2018"
 # dirname = "intermediate_data/EP_output/result_ann_WRF_2016"
 # epw_path = "input_data/annual_WRF/M02_EnergyPlus_Forcing_Historical_LowRes_ann_2016"
+
+def test_run_all_model(prefix=""):
+    idfs = glob.glob("{}/{}*.idf".format(working_dir, prefix))
+    test_epw = os.path.join(os.getcwd(),
+                            "input_data/M02_EnergyPlus_Forcing_Historical_LowRes/USA_CA_Los.Angeles.Intl.AP.722950_TMY3.epw")
+    api = EnergyPlusAPI()
+    for idf in idfs:
+        idf_name = idf.replace(".idf", "")
+        idf_name = idf_name.replace(working_dir + "/", "")
+        idf_kw = idf_name.replace(".", "_")
+        print(idf_kw)
+        output_dir = os.path.join(os.getcwd(), "intermediate_data/EP_output/testrun/{}".format(idf_kw))
+        if (not os.path.isdir(output_dir)):
+            os.mkdir(output_dir)
+        state = api.state_manager.new_state()
+        return_value = api.runtime.run_energyplus(
+            state, [
+                '-d',
+                output_dir,
+                '-D',
+                '-w',
+                test_epw,
+                '-r',
+                idf
+            ]
+        )
+        api.state_manager.delete_state(state)
+
+test_run_all_model("")
 
 def run_sim_with_idf_epw_df(df_idf_epw):
     api = EnergyPlusAPI()
