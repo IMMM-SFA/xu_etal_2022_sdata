@@ -7,34 +7,29 @@ output: html_document
 
 ```{r setup, include=FALSE, message=FALSE}
 knitr::opts_chunk$set(echo = FALSE)
-knitr::opts_knit$set(root.dir = "../")
+knitr::opts_knit$set(root.dir = "~/Dropbox/workLBNL/EESA/meta_repo/xu_etal_2022_tbd/")
 ```
 
 ```{r readAndJoin}
 library("sf")
 library("dplyr")
 
-run.read.data = TRUE
+run.read.data = FALSE
 grid.level = "coarse"
-## grid.level = "finer"
 sf::sf_use_s2(FALSE)
 
-input.path = "input_data"
-output.path = "intermediate_data"
-year = 2018
-
 if (grid.level == "coarse") {
-  grid.path = sprintf("%s/annual_WRF/M02_EnergyPlus_Forcing_Historical_LowRes_ann_%s/meta", input.path, year)
-  output.name = sprintf("%s/building_to_wrf_grid.geojson", output.path)
+  grid.path = "input_data/M02_EnergyPlus_Forcing_Historical_LowRes/meta"
+  output.name = "intermediate_data/building_to_wrf_grid.geojson"
   suf = ""
 } else {
-  grid.path = sprintf("%s/high res grid for reporting", input.path)
-  output.name = sprintf("%s/building_to_finer_wrf_grid.geojson", output.path)
+  grid.path = "input_data/high res grid for reporting"
+  output.name = "intermediate_data/building_to_finer_wrf_grid.geojson"
   suf = "_finer"
 }
 
 if (run.read.data) {
-    df <- sf::st_read(sprintf("%s/compiled_LA_building.geojson", output.path))
+    df <- sf::st_read("intermediate_data/compiled_LA_building.geojson")
     df.centroid <- sf::st_centroid(df)
     df.grid <- sf::st_read(sprintf("%s/wrf-grids-origin.geojson", grid.path))
     df.join <- df.grid %>%
@@ -44,19 +39,12 @@ if (run.read.data) {
     df.join %>%
         sf::st_write(output.name)
 } else {
-    df <- sf::st_read(sprintf("%s/compiled_LA_building.geojson", output.path))
+    df <- sf::st_read("intermediate_data/compiled_LA_building.geojson")
     df.grid <- sf::st_read(sprintf("%s/wrf-grids-origin.geojson", grid.path))
     df.join = sf::st_read(output.name)
 }
 
-la.boundary <- sf::read_sf(sprintf("%s/domain/la-county-boundary.geojson", input.path))
-## verify ones not joined in qgis
-## not.joined <- df %>%
-##     dplyr::filter(!(OBJECTID %in% df.join$OBJECTID)) %>%
-##     {.}
-## not.joined %>%
-##     sf::st_write("not_matched_to_grid_initial_s2_off.geojson")
-
+la.boundary <- sf::read_sf("input_data/domain/la-county-boundary.geojson")
 ```
 
 ```{r vis}
@@ -245,19 +233,10 @@ all.building.count.to.prototype.with.source <- df.no.geom %>%
   {.}
 
 all.building.count.to.prototype.with.source %>%
-  readr::write_csv(sprintf("%s/all_building_count_to_prototype_with_source%s.csv", output.path, suf))
+  readr::write_csv(sprintf("intermediate_data/all_building_count_to_prototype_with_source%s.csv", suf))
 ```
 
 ```{r summaryStats}
-join.type.divide %>%
-  dplyr::select(OBJECTID, HEIGHT, EffectiveYearBuilt, SQFTmain) %>%
-  {.}
-
-  dplyr::summarise_if(is.numeric, tibble::lst(min, mean, ))
-  summary()
-
-  {.}
-
 join.type.divide.numeric.summary <- join.type.divide %>%
   dplyr::select(id, OBJECTID, SQFTmain, EffectiveYearBuilt, HEIGHT, num.floor) %>%
   tidyr::gather(variable, value, SQFTmain:num.floor) %>%
@@ -374,5 +353,5 @@ join.type.divide.type.vin.cnt %>%
   dplyr::group_by(id, building.type, vintage) %>%
   dplyr::summarise(building.count = n()) %>%
   dplyr::ungroup() %>%
-  readr::write_csv(sprintf("%s/summary/building_type_vintage_count_per_grid%s.csv", output.path, suf))
+  readr::write_csv(sprintf("intermediate_data/summary/building_type_vintage_count_per_grid%s.csv", suf))
 ```

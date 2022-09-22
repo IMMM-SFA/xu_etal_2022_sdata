@@ -1,6 +1,6 @@
 library("dplyr")
 
-df = readr::read_csv("epw_idf_to_simulate.csv")
+df = readr::read_csv("intermediate_data/epw_idf_to_simulate.csv")
 
 ## df %>%
 ##   distinct(idf.name) %>%
