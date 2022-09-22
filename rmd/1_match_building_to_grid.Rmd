@@ -69,17 +69,6 @@ df.no.geom <- df
 sf::st_geometry(df.no.geom) <- NULL
 
 df.no.geom %>%
-  tibble::as_tibble() %>%
-  dplyr::group_by(GeneralUseType, SpecificUseType) %>%
-  dplyr::summarise(total.building.size.sqft = sum(SQFTmain), mean.EffectiveYearBuilt = mean(EffectiveYearBuilt)) %>%
-  dplyr::ungroup() %>%
-  dplyr::arrange(desc(total.building.size.sqft)) %>%
-  dplyr::ungroup() %>%
-  dplyr::mutate(building.size.percent = total.building.size.sqft / sum(total.building.size.sqft) * 100) %>%
-  readr::write_csv(sprintf("%s/summary/size_year_by_type_LA_building.csv", output.path)) %>%
-  {.}
-
-df.no.geom %>%
   dplyr::mutate(footprint.larger.than.SQFTmain = (FootprintArea > SQFTmain)) %>%
   dplyr::select(footprint.larger.than.SQFTmain) %>%
   summary()
@@ -97,25 +86,21 @@ df.join.no.geom <- df.join
 sf::st_geometry(df.join.no.geom) <- NULL
 
 df.join.no.geom <- df.join.no.geom %>%
-    tibble::as_tibble() %>%
-    {.}
+  tibble::as_tibble() %>%
+  {.}
 
-join.has.building <- df.join.no.geom %>%
-  dplyr::filter(!is.na(OBJECTID)) %>%
+remove.not.modelled.type <- df.join.no.geom %>%
   ## has valid type
   dplyr::filter(!GeneralUseType == "(missing)") %>%
+  dplyr::filter(!remap.EP.ref.building == "?") %>%
+  dplyr::filter(remap.EP.ref.building != "parking") %>%
   {.}
-remove.not.modelled.type <- join.has.building %>%
-    dplyr::filter(!remap.EP.ref.building == "?") %>%
-    dplyr::filter(remap.EP.ref.building != "parking") %>%
-    {.}
 remove.small.building <- remove.not.modelled.type %>%
     dplyr::filter(SQFTmain > 323) %>%
     {.}
 remove.no.height <- remove.small.building %>%
     dplyr::filter(!((remap.EP.ref.building %in% c("hotel", "office")) & (is.na(HEIGHT)))) %>%
     {.}
-
 join.has.building.filter <- remove.no.height %>%
     dplyr::mutate_at(vars(remap.EP.ref.building), tolower) %>%
     {.}
@@ -154,14 +139,11 @@ tibble::tibble(steps = c("Before joining",
 The following buildings do not have corresponding EnergyPlus prototype model, thus are removed from the analysis.
 
 ```{r removeUnmodelledType}
-
-join.has.building %>%
-  filter((remap.EP.ref.building == "?") | (remap.EP.ref.building == "parking")) %>%
-  dplyr::group_by(GeneralUseType, SpecificUseType) %>%
-  dplyr::summarise(building.count = n(), total.size.sqft = sum(SQFTmain)) %>%
-  dplyr::ungroup() %>%
-  arrange(GeneralUseType, SpecificUseType) %>%
-  knitr::kable()
+df.join.no.geom %>%
+    filter((remap.EP.ref.building == "?") | (remap.EP.ref.building == "parking")) %>%
+    distinct(GeneralUseType, SpecificUseType) %>%
+    arrange(GeneralUseType, SpecificUseType) %>%
+    knitr::kable()
 ```
 
 Use the following assumed ceiling height to sub-divide building types sub-categories following Phase 1 approach.
@@ -180,7 +162,6 @@ join.type.divide <- join.has.building.filter %>%
   ## remove the ones needing height for sub-classification
   dplyr::filter(!((remap.EP.ref.building %in% c("hotel", "office")) & (is.na(HEIGHT)))) %>%
   dplyr::mutate(remap.EP.2 = case_when(
-                  remap.EP.ref.building == "single-family" ~ ifelse(SQFTmain < 1500, "small single-family", "large single-family"),
                   remap.EP.ref.building == "hotel" ~ ifelse(num.floor > 4 & SQFTmain >= 64583.46, "large hotel", "small hotel"),
                   remap.EP.ref.building == "office" ~ case_when(num.floor >= 6 | SQFTmain > 100000 ~ "large office",
                                                                 num.floor <= 3 | SQFTmain < 2500 ~ "small office",
@@ -188,18 +169,16 @@ join.type.divide <- join.has.building.filter %>%
                   TRUE ~ remap.EP.ref.building)) %>%
   {.}
 
-map.to.idf.name <- readr::read_csv(sprintf("%s/type_vintage_to_idf_mapping.csv", input.path)) %>%
-  dplyr::select(-building.count) %>%
-  dplyr::mutate_at(vars(building.type), recode, "large retail"="retail", "small retail"="retail",
-                   "large restaurant"="full service restaurant", "small restaurant"="full service restaurant") %>%
-  {.}
+join.type.divide %>%
+  dplyr::distinct(remap.EP.2)
 
-map.to.idf.name %>%
-  distinct(idf.name) %>%
-  na.omit() %>%
-  readr::write_csv(sprintf("%s/unique_idf_used%s.csv", output.path, suf))
+map.to.idf.name <- readr::read_csv("input_data/type_vintage_to_idf_mapping.csv")
 
-idf.source = readr::read_csv(sprintf("%s/unique_idf_used_with_source.csv", input.path))
+## map.to.idf.name %>%
+##   distinct(idf.name) %>%
+##   readr::write_csv(sprintf("unique_idf_used%s.csv", suf))
+
+idf.source = readr::read_csv("input_data/unique_idf_used_with_source.csv")
 
 map.to.idf.name <- map.to.idf.name %>%
   dplyr::left_join(idf.source, by="idf.name")
@@ -212,7 +191,6 @@ all.building.count.to.prototype.with.source <- df.no.geom %>%
   dplyr::mutate(remap.EP.ref.building = as.character(remap.EP.ref.building)) %>%
   dplyr::mutate_at(vars(remap.EP.ref.building), tolower) %>%
   dplyr::mutate(remap.EP.2 = case_when(
-                  remap.EP.ref.building == "single-family" ~ ifelse(SQFTmain < 1500, "small single-family", "large single-family"),
                   remap.EP.ref.building == "hotel" ~ ifelse(num.floor > 4 & SQFTmain >= 64583.46, "large hotel", "small hotel"),
                   remap.EP.ref.building == "office" ~ case_when(num.floor >= 6 | SQFTmain > 100000 ~ "large office",
                                                                 num.floor <= 3 | SQFTmain < 2500 ~ "small office",
@@ -253,7 +231,7 @@ join.type.divide.numeric.summary <- join.type.divide %>%
   {.}
 
 join.type.divide.numeric.summary %>%
-  readr::write_csv(sprintf("%s/summary/numeric_field_stats_per_grid%s.csv", output.path, suf))
+  readr::write_csv(sprintf("intermediate_data/summary/numeric_field_stats_per_grid%s.csv", suf))
 ```
 
 ```{r summaryByMedian}
@@ -284,7 +262,6 @@ join.type.divide.numeric.summary %>%
                                     "max"=~max(., na.rm = TRUE))) %>%
     dplyr::ungroup() %>%
     knitr::kable(caption = "Summary of the mean of grid cell values")
-
 ```
 
 Classify buildings to three different vintages by EffectiveYearBuilt: "before 1980", "1981-2008 (2004)", and "after 2008 (2013)"
@@ -299,11 +276,8 @@ join.type.divide.type.vin.cnt <- join.type.divide %>%
   {.}
 
 join.type.divide.type.vin.cnt %>%
-  readr::write_csv(sprintf("%s/compiled_cell_building%s.csv", output.path, suf))
+  readr::write_csv(sprintf("intermediate_data/compiled_cell_building%s.csv", suf))
 
-join.type.divide.type.vin.cnt %>%
-    head() %>%
-    knitr::kable()
 ```
 
 The following grid cells have valid building information.
