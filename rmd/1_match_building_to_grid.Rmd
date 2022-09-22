@@ -123,7 +123,7 @@ join.has.building.filter <- remove.no.height %>%
 df.grid.no.geom <- df.grid %>%
     tibble::as_tibble()
 
-dfs.to.tabulate.grid <- list(df.grid.no.geom, join.has.building, remove.not.modelled.type, remove.small.building, remove.no.height)
+dfs.to.tabulate.grid <- list(df.grid.no.geom, df.join.no.geom, remove.not.modelled.type, remove.small.building, remove.no.height)
 
 n.grid <- sapply(dfs.to.tabulate.grid, function(df.i) {
     num.grid <- df.i %>%
@@ -132,7 +132,7 @@ n.grid <- sapply(dfs.to.tabulate.grid, function(df.i) {
     num.grid
 })
 
-dfs.to.tabulate.building <- list(df.no.geom, join.has.building, remove.not.modelled.type, remove.small.building, remove.no.height)
+dfs.to.tabulate.building <- list(df.no.geom, df.join.no.geom, remove.not.modelled.type, remove.small.building, remove.no.height)
 
 n.building <- sapply(dfs.to.tabulate.building, function(df.i) {
     num.grid <- df.i %>%
@@ -142,7 +142,7 @@ n.building <- sapply(dfs.to.tabulate.building, function(df.i) {
 })
 
 tibble::tibble(steps = c("Before joining",
-                         "Join grid with building footprint",
+                         "Building centroid contained in WRF grids",
                          "Remove not modelled building types in EnergyPlus",
                          "Remove buildings smaller than 323 sqft following Phase 1",
                          "Remove hotel and office buildings with no height (used in sub-divide to small and large)"),
