@@ -340,7 +340,6 @@ df.geo.compile %>%
 ## update the type recoding if needed
 if (FALSE) {
   df.type.recode = readr::read_csv("input_data/building_type_recode.csv") %>%
-      dplyr::mutate(`remap EP ref building` = ifelse(is.na(`remap EP ref building`), SpecificUseType, `remap EP ref building`)) %>%
       dplyr::select(-count) %>%
       {.}
 
