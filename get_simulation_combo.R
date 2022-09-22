@@ -5,10 +5,6 @@ df = readr::read_csv("intermediate_data/summary/building_type_vintage_count_per_
   dplyr::select(-building.count)
 
 df.idf.lookup = readr::read_csv("input_data/type_vintage_to_idf_mapping.csv") %>%
-  dplyr::select(-building.count) %>%
-  ## do not differ small large restaurant and retail
-  dplyr::mutate_at(vars(building.type), recode, "large retail"="retail", "small retail"="retail",
-                    "large restaurant"="full service restaurant", "small restaurant"="full service restaurant") %>%
   na.omit()
 
 df %>%
