@@ -1,4 +1,5 @@
 library("dplyr")
+library("janitor")
 
 usetypes = c("commercial", "industrial", "institutional", "res_total")
 
@@ -150,25 +151,53 @@ prototype.area <- readr::read_csv("input_data/prototype_bldg_area.csv") %>%
 ## get idf.kw to EnergyAtlas type map
 building.metadata <- readr::read_csv("output_data/building_metadata.csv")
 
-agg.by.energy.atlas.type <- building.metadata %>%
-    tibble::as_tibble() %>%
-    dplyr::select(OBJECTID, GeneralUseType, SpecificUseType, usetype, building.area.m2, idf.kw, id.grid.coarse) %>%
-    dplyr::rename(epw.id = id.grid.coarse) %>%
-    dplyr::group_by(usetype, idf.kw, epw.id) %>%
-    dplyr::summarise(building.area.m2 = sum(building.area.m2)) %>%
-    dplyr::ungroup() %>%
-    dplyr::left_join(annual.sim.result.idf.epw.2016, by=c("idf.kw", "epw.id")) %>%
-    dplyr::left_join(prototype.area, by="idf.kw") %>%
-    tidyr::gather(variable, value, energy.elec:energy.gas) %>%
-    dplyr::mutate(value = value / prototype.m2 * building.area.m2) %>%
-    tidyr::spread(variable, value) %>%
-    dplyr::select(-epw.id, -prototype.m2) %>%
-    dplyr::group_by(usetype) %>%
-    dplyr::summarise_if(is.numeric, sum) %>%
-    dplyr::ungroup() %>%
+get.agg.sim.energy.by.atlas.type <- function(df) {
+    building.metadata %>%
+        tibble::as_tibble() %>%
+        dplyr::select(OBJECTID, GeneralUseType, SpecificUseType, usetype, building.area.m2, idf.kw, id.grid.coarse) %>%
+        dplyr::rename(epw.id = id.grid.coarse) %>%
+        dplyr::group_by(usetype, idf.kw, epw.id) %>%
+        dplyr::summarise(building.area.m2 = sum(building.area.m2)) %>%
+        dplyr::ungroup() %>%
+        dplyr::left_join(df, by=c("idf.kw", "epw.id")) %>%
+        dplyr::left_join(prototype.area, by="idf.kw") %>%
+        tidyr::gather(variable, value, energy.elec:energy.gas) %>%
+        dplyr::mutate(value = value / prototype.m2 * building.area.m2) %>%
+        tidyr::spread(variable, value) %>%
+        dplyr::select(-epw.id, -prototype.m2) %>%
+        dplyr::group_by(usetype) %>%
+        dplyr::summarise_if(is.numeric, sum) %>%
+        dplyr::ungroup() %>%
+        {.}
+}
+
+agg.by.energy.atlas.type.2018 <- get.agg.sim.energy.by.atlas.type(annual.sim.result.idf.epw.2018)
+
+cec.2018 <- readr::read_csv("input_data/CECdata/ElectricityByCounty_2018.csv") %>%
+    dplyr::select(-`Total Usage`, -County) %>%
+    dplyr::rename(electricity.Gwh = `2018`) %>%
+    dplyr::mutate(source = "CEC") %>%
     {.}
-agg.by.energy.atlas.type %>%
-    readr::write_csv("intermediate_data/energy_emission_by_EnergyAtlas_type.csv")
+
+cec.2018 
+
+agg.by.energy.atlas.type.2018 %>%
+    dplyr::select(usetype, energy.elec) %>%
+    dplyr::mutate(energy.elec = energy.elec * 2.77778e-7 * 1e-6) %>%
+    dplyr::mutate(Sector = ifelse(usetype %in% c("single_family", "multi_family", "residential_other"), "Residential", "Non-Residential")) %>%
+    dplyr::group_by(Sector) %>%
+    dplyr::summarise(energy.elec = sum(energy.elec)) %>%
+    dplyr::ungroup() %>%
+    dplyr::rename(electricity.Gwh = energy.elec) %>%
+    janitor::adorn_totals() %>%
+    dplyr::mutate(source = "this study") %>%
+    dplyr::bind_rows(cec.2018) %>%
+    tidyr::spread(source, electricity.Gwh) %>%
+    dplyr::mutate(ratio = `this study` / CEC) %>%
+readr::write_csv("intermediate_data/sim_elec_cmp_CEC_2018.csv")
+
+get.agg.sim.energy.by.atlas.type(annual.sim.result.idf.epw.2016)
+    readr::write_csv("intermediate_data/energy_emission_by_EnergyAtlas_type_2016.csv")
 
 convert.unit.sim.summary <- function(df) {
     df %>%
