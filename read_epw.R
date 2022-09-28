@@ -14,11 +14,11 @@ read.epw <- function(filepath) {
 
   df = readr::read_csv(filepath, skip=8,
                       col_names=col.names,
-                      col_types=readr::cols(year=col_integer(),
-                                            month=col_integer(),
-                                            day=col_integer(),
-                                            hour=col_integer(),
-                                            minute=col_integer())) %>%
+                      col_types=readr::cols(year=readr::col_integer(),
+                                            month=readr::col_integer(),
+                                            day=readr::col_integer(),
+                                            hour=readr::col_integer(),
+                                            minute=readr::col_integer())) %>%
       tibble::as_tibble() %>%
       {.}
   df
