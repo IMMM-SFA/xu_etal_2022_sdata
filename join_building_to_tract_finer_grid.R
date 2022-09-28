@@ -35,6 +35,7 @@ if (!file.exists("intermediate_data/building_id_to_census_tract.csv")) {
 }
 
 grid.finer <- sf::st_read("input_data/high res grid for reporting/wrf-grids-origin.geojson")
+
 if (!file.exists("intermediate_data/building_id_to_finer_grid.csv")) {
     df.building.finer.grid <- sf::st_join(df.building.centroid, grid.finer, join = sf::st_within)
     df.building.finer.grid.nogeom <- df.building.finer.grid
@@ -48,13 +49,15 @@ if (!file.exists("intermediate_data/building_id_to_finer_grid.csv")) {
     df.building.to.finer.grid %>%
         readr::write_csv("intermediate_data/building_id_to_finer_grid.csv")
 } else {
-    df.building.to.finer.grid %>%
+    df.building.to.finer.grid <-
         readr::read_csv("intermediate_data/building_id_to_finer_grid.csv")
 }
 
 df.type.vintage.to.idf <- readr::read_csv("input_data/type_vintage_to_idf_mapping.csv")
 
-df.idf.kw.to.usetype <- readr::read_csv("input_data/idf_kw_to_EnergyAtlas_usetype.csv")
+df.type.recode <- readr::read_csv("input_data/building_type_recode.csv") %>%
+    dplyr::rename(usetype = `remap Energy Atlas`) %>%
+    dplyr::select(-starts_with("remap"), -count)
 
 df.building.footprint.m2 <- readr::read_csv("intermediate_data/LA_building_footprint_m2.csv")
 
@@ -77,14 +80,14 @@ df.compiled.building %>%
     dplyr::left_join(df.building.centroid) %>%
     sf::st_write("building_unmatched_to_finer.geojson")
 
-df.building.meta <- df.building.centroid %>%
+df.building.meta <- df.building.centroid.nogeom %>%
     tibble::as_tibble() %>%
     ## remove the ones needing height for sub-classification
     dplyr::inner_join(df.compiled.building, by="OBJECTID") %>%
     dplyr::inner_join(df.type.vintage.to.idf, by=c("building.type", "vintage")) %>%
     dplyr::mutate(idf.kw = gsub(".idf", "", idf.name, fixed=TRUE)) %>%
     dplyr::mutate(idf.kw = gsub(".", "_", idf.kw, fixed=TRUE)) %>%
-    dplyr::inner_join(df.idf.kw.to.usetype, by="idf.kw") %>%
+    dplyr::inner_join(df.type.recode, by=c("GeneralUseType", "SpecificUseType")) %>%
     dplyr::inner_join(df.building.footprint.m2, by="OBJECTID") %>%
     dplyr::mutate(building.area.m2 = SQFTmain * 0.0929) %>%
     dplyr::left_join(df.building.to.tract, by="OBJECTID") %>%
@@ -93,8 +96,13 @@ df.building.meta <- df.building.centroid %>%
     dplyr::select(OBJECTID, GeneralUseType, SpecificUseType, EffectiveYearBuilt, building.type, vintage, idf.name, idf.kw, usetype, FootprintArea.m2, building.area.m2, id.grid.coarse, id.grid.finer, id.tract) %>%
     {.}
 
-df.building.meta %>%
+df.building.centroid %>%
+    dplyr::select(OBJECTID) %>%
+    dplyr::inner_join(df.building.meta, by="OBJECTID") %>%
     sf::st_write("output_data/building_metadata.geojson")
+
+df.building.meta %>%
+    readr::write_csv("output_data/building_metadata.csv")
 
 df.building.meta.no.geom <- df.building.meta %>%
     tibble::as_tibble() %>%
