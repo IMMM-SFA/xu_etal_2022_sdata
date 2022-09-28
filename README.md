@@ -48,14 +48,16 @@ Held in the input_data folder, including the external data files referenced down
     - July WRF data: held in M02_EnergyPlus_Forcing_Historical_LowRes. The
       folder structure is similar to the
       annual_WRF/M02_EnergyPlus_Forcing_Historical_LowRes_ann_<year> folders
-    - WRF grid latitude longitude for two resolutions, 
-        - coarse grid:
-          M02_EnergyPlus_Forcing_Historical_LowRes/meta/wrf-grids-origin.geojson.
-          This grid corresponds to the epw files used in EnergyPlus simulations.
-        - fine grid: high res grid for reporting/wrf-grids-origin.geojson. This
-          grid system is used in reporting
-        - census tract: domain/tl_2018_06_tract/tl_2018_06_tract.shp. This is
-          used in reporting.
+- geojson or shapefiles of regions of analysis
+    - coarse WRF grid:
+      M02_EnergyPlus_Forcing_Historical_LowRes/meta/wrf-grids-origin.geojson.
+      This grid corresponds to the epw files used in EnergyPlus simulations.
+    - fine WRF grid: high res grid for reporting/wrf-grids-origin.geojson. This
+      grid system is used in reporting
+    - census tract: domain/tl_2018_06_tract/tl_2018_06_tract.shp. This is
+      used in reporting.
+    - city boundary: input_data/domain/City_Boundary.geojson
+    - county boundary: input_data/domain/la-county-boundary.geojson
 - Prototype Building Models: held in folder "LA Prototypes"
     - commercial buildings: most commercial building models are held in Com
       (OS_Standards). The Com need mod folder contains models for Religious
@@ -66,19 +68,39 @@ Held in the input_data folder, including the external data files referenced down
       The adjusted model is in "NursingHome mod sched autosize"
     - residential buildings: held in "Res (CBES)" folder. "bldg_11" are
       single-family buildings. "building_13" are multi-family buildings. "vin_1"
-      is pre-1980. "vin_5" is 2004 and "vin_8" is 2013. ""es_schedule" contains
+      is pre-1980. "vin_5" is 2004 and "vin_8" is 2013. "res_schedule" contains
       the schedule files used in residential models.
+    - sources of the prototype building models:
+
+        | Model | Source |
+        |-------------|-------------------|
+        | single-family, multi-family | CBES |
+        | heavy and light manufacturing facilities | adapted from the warehouse
+                  model from OpenStudio Standard Gem |
+        | nursing home | [Sun et al. 2020] (https://www.sciencedirect.com/science/article/pii/S0360132320302018?casa_token=Ct-JsOrSNeYAAAAA:LVadWomEMGB-oGf3A69HCkAzhKZpeKZJ78kjKuKlcQpuFzki2By9JRU7azPgErbZhjk-y10iOg#fig4.) |
+        | others | OpenStudio Standard Gem |
+
+    - final simulation input data files:
 - Lookup tables to re-map types between assessor data, prototype building
   models, and Energy Atlas building types in verification
     - building_type_recode.csv maps the building types in
       Assessor_Parcels_Data_-_2019.csv and EnergyPlus prototype building type
     - type_vintage_to_idf_mapping.csv maps building type and vintage to the idf
       file used to simulate the building
+    - prototype_bldg_area.csv maps prototype building models idf file names to
+      their building size in m2
+    - maps the idf key words (filename removing the ".") to the usetypes defined
+      in Energy Atlas for later comparison
 - MECS survey tables are held in "MECS" folder. It is used for extracting
   summary statistics to model heavy and light manufacturing facilities
 - Energy Atlas: annual electricity and gas consumption. "usage_bld_kwh.csv" is
   electricity data. "usage_bld_therm.csv" is gas data. "usage_bld_btu.csv" is
   electricity + gas data.
+- ResStock data: simulation data set of residential buildings, downloaded from
+  this link
+  https://data.openei.org/s3_viewer?bucket=oedi-data-lake&prefix=nrel-pds-building-stock%2Fend-use-load-profiles-for-us-building-stock%2F2021%2F,
+  resstock_tmy3_release_1/ and comstock_tmy3_release_1. The downloaded data are
+  in "input_resstock" and "input_comstock" folder
 
 ### Intermediate data
 Held in the intermediate_data folder, including the data files in the intermediate data analysis or simulation steps
@@ -110,52 +132,63 @@ building size, and centroid geometry of the compiled
 | GeneralUseType | Building type, inherited from Assessor_Parcels_Data_-_2019.csv |
 | SpecificUseType | Building type, inherited from Assessor_Parcels_Data_-_2019.csv |
 | EffectiveYearBuilt | Built year, inherited from Assessor_Parcels_Data_-_2019.csv |
+| HEIGHT | Building height, inherited from Assessor_Parcels_Data_-_2019.csv |
 | building.type | Prototype building type |
 | vintage | Prototype building vintage |
-| idf | Prototype model filename used to simulate the building |
+| idf.name | Prototype model filename used to simulate the building |
+| idf.kw | Prefix of folders holding EnergyPlus simulation results |
 | usetype | Corresponding EnergyAtlas usetype |
-| footprint.area | Total building footprint area [m2], inherited from SQFTMain column in Assessor_Parcels_Data_-_2019.csv |
-| building.size | Total building total floor area [m2] |
+| FootprintArea.m2 | Total building footprint area [m2], inherited from SQFTMain column in Assessor_Parcels_Data_-_2019.csv |
+| building.area.m2 | Total building total floor area [m2] |
 | id.grid.coarse | The grid cell in the 12km x 12km grid system containing this building |
 | id.grid.finer | The grid cell in the 450m x 450m grid system containing this building |
 | id.tract | The census tract GEOID containing this building |
 | geometry | Point of building centroid |
 
-- aggregated heat emission and energy data for the three spatial resolutions. All three files have the same column structure.
+- aggregated heat emission and energy data for the three spatial resolutions.
     - finer grid 450 x 450m
     - coarser grid 12km x 12km
-    - census tract
+    - census tract 
+    
+All files have the same column structure. The hourly_heat_energy folder contains
+the compiled hourly heat emission and energy consumption data in the following
+format. The "annual_2018.csv" holds data at the 12x12km grid level. The
+"annual_2018_finer_01.csv" through "annual_2018_finer_12.csv" holds the data at
+the 450m x 450m level. Each data file corresponds to a month. The ""
 
 | Column name | Column definition |
 |-------------|-------------------|
-| GeoID | WRF grid ID or census tract GEOID. Use the geojson for the corresponding spatial resolution to look up the location and shape of the GeoID |
-| Timestamp | Hourly, local time of LA county. |
-| exf | Zone exfiltration heat loss [MJ] |
-| exh | Zone exhaust air heat loss [MJ] |
-| rej | HVAC system heat rejection [MJ] |
-| rel | HVAC system relief air heat loss [MJ] |
-| surf | Surface heat emission [MJ] |
+| geoid | WRF grid ID or census tract GEOID. Use the geojson for the corresponding spatial resolution to look up the location and shape of the GeoID |
+| timestamp | Hourly, local time of LA county. |
+| emission.exfiltration | Zone exfiltration heat loss [MJ] |
+| emission.exhaust | Zone exhaust air heat loss [MJ] |
+| emission.rej | HVAC system heat rejection [MJ] |
+| emission.rel | HVAC system relief air heat loss [MJ] |
+| emission.surf | Surface heat emission [MJ] |
 | emission.total | Total heat emission [MJ] |
-| elec | Total electricity consumption [MJ] |
-| gas | Total gas consumption [MJ] |
+| energy.elec | Total electricity consumption [MJ] |
+| energy.gas | Total gas consumption [MJ] |
 | energy.total | Total electricity and gas consumption [MJ] |
 
-- Aggregated geographical data referenced in heat emission and energy consumption
+- Aggregated geographical data referenced in heat emission and energy
+  consumption. The "geo_data" folder contains the grid and census tract polygon
+  shapes and associated area data with column layout as shown in the following
+  table.
  
 | Column name | Column definition |
 |-------------|-------------------|
-| GeoID | WRF grid ID or census tract GEOID |
+| geoid | WRF grid ID or census tract GEOID |
 | geometry | Polygon shapes of the WRF grid points bounding box or census tracts |
-| area | Grid or census tract polygon size |
-| footprint.area | Total building footprint area [m2] |
-| building.size | Total building total floor area [m2] |
+| FootprintArea.m2 | Total building footprint area [m2] |
+| building.area.m2 | Total building total floor area [m2] |
+| area.m2 | Grid or census tract polygon size |
     
 ## Contributing modeling software
 | Model | Version | Repository Link | DOI |
 |-------|---------|-----------------|-----|
-| EnergyPlus | 22.1 | https://github.com/NREL/EnergyPlus |  |
+| EnergyPlus | 22.1 | https://github.com/NREL/EnergyPlus | https://doi.org/10.1016/S0378-7788(00)00114-6 |
 
-## Reproduce my experiment
+## Reproduce the data set
 
 The following is an overview of the workflow
 
@@ -232,8 +265,12 @@ Following the steps to reproduce the analysis
     - change the year and "Day of Week for Start Day" in the RunPeriod object to
       match the actual simulation year
 8. Use run_sim.py to run simulations
-9. Validation with measured and other data source: fixme: add rmd
+9. Validation with measured and other data source
+   - county level: see details in verify_county.R
+   - county neighborhood: verify against Energy Atlas neighborhood data in 2016.
+     See details in verify_county.R
 10. Produce grid-level heat emission data.
+11. Produce building metadata geojson: use join_building_to_tract_finer_grid.R
 
 <!-- Run the following scripts in the `workflow` directory to re-create this experiment: -->
 
