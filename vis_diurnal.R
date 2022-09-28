@@ -39,7 +39,7 @@ df.season.avg %>%
     ggplot2::ylab("Heat emission (W/m2)") +
     ggplot2::ggtitle("Average hourly total heat emission (W/m2) across finer grids") +
     ggplot2::theme()
-ggplot2::ggsave("figures/diurnal_by_season_finer.png", width = 8, height = 6)
+ggplot2::ggsave("figures/diurnal_by_season_finer.png", width = 8, height = 4)
 
 ## check one time snapshot
 ## date = "08_15"
@@ -65,4 +65,79 @@ building.metadata <- sf::st_read("output_data/building_metadata.geojson")
 
 ## city boundary shape
 ## downloaded from: https://geohub.lacity.org/datasets/city-boundary/explore?location=34.019779%2C-118.412043%2C10.90
-city.boundary <- 
+city.boundary <- sf::st_read("input_data/domain/City_Boundary.geojson") %>%
+    dplyr::select(-OBJECTID)
+
+building.city.join <- sf::st_join(building.metadata, city.boundary, join=sf::st_within)
+
+building.in.city <- building.city.join %>%
+    dplyr::filter(!is.na(CITY)) %>%
+    {.}
+
+## 577802 buildings in the city
+building.in.city %>%
+    nrow()
+
+annual.sim.hourly.idf.epw.2018 <- readr::read_csv("intermediate_data/annual_sim_result_by_idf_epw_2018.csv")
+
+annual.sim.hourly.sep.by.day <- annual.sim.hourly.idf.epw.2018 %>%
+    dplyr::mutate(day = substr(`Date/Time`, 1, 5)) %>%
+    dplyr::group_by(day) %>%
+    dplyr::group_split()
+
+prototype.area <- readr::read_csv("input_data/prototype_bldg_area.csv") %>%
+    dplyr::mutate(idf.kw = gsub(".idf", "", idf.name, fixed=TRUE)) %>%
+    dplyr::mutate(idf.kw = gsub(".", "_", idf.kw, fixed=TRUE)) %>%
+    {.}
+
+idf.epw.area <- building.in.city %>%
+    tibble::as_tibble() %>%
+    dplyr::rename(epw.id = id.grid.coarse) %>%
+    dplyr::group_by(idf.kw, epw.id) %>%
+    dplyr::summarise(building.area.m2 = sum(building.area.m2)) %>%
+    dplyr::ungroup() %>%
+    {.}
+
+city.hourly.result <- idf.epw.area %>%
+    dplyr::inner_join(annual.sim.hourly.idf.epw.2018, by=c("idf.kw", "epw.id")) %>%
+    dplyr::inner_join(prototype.area, by="idf.kw") %>%
+    tidyr::gather(variable, value, emission.exfiltration:energy.gas) %>%
+    dplyr::mutate(value = value / prototype.m2 * building.area.m2) %>%
+    tidyr::spread(variable, value) %>%
+    {.}
+
+city.hourly.result %>%
+    dplyr::select(idf.kw, epw.id, building.area.m2, `Date/Time`, starts_with("emission"), starts_with("energy")) %>%
+    readr::write_csv("intermediate_data/city_hourly_idf_epw_result.csv")
+
+city.area = as.numeric(sf::st_area(city.boundary))
+
+city.hourly.heat.wperm2 <- city.hourly.result %>%
+    dplyr::select(`Date/Time`, starts_with("emission")) %>%
+    dplyr::group_by(`Date/Time`) %>%
+    dplyr::summarise_if(is.numeric, sum) %>%
+    dplyr::ungroup() %>%
+    dplyr::mutate_if(is.numeric, function(x) x * 0.000277778 / city.area) %>%
+    {.}
+
+## note season here is different from above
+city.diurnal.by.season <- city.hourly.heat.wperm2 %>%
+    dplyr::mutate(month = as.numeric(substr(`Date/Time`, 1, 2))) %>%
+    dplyr::mutate(hour = as.numeric(substr(`Date/Time`, 8, 9))) %>%
+    dplyr::mutate(season = case_when(month %in% c(12, 1, 2) ~ "winter",
+                                     month %in% c(7, 8, 9) ~ "summer",
+                                     TRUE ~ "transition")) %>%
+    dplyr::select(-month) %>%
+    dplyr::group_by(season, hour) %>%
+    dplyr::summarise_if(is.numeric, mean) %>%
+    dplyr::ungroup() %>%
+    {.}
+
+city.diurnal.by.season %>%
+    ggplot2::ggplot(ggplot2::aes(x = hour, y = emission.overall, color = season)) +
+    ggplot2::geom_line() +
+    ggplot2::geom_point() +
+    ggplot2::ylab("Heat emission (W/m2)") +
+    ggplot2::ggtitle("Hourly total heat emission (W/m2) across the city") +
+    ggplot2::theme()
+ggplot2::ggsave("figures/diurnal_by_season_city.png", width = 8, height = 4)
