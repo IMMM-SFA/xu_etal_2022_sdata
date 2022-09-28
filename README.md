@@ -62,8 +62,7 @@ Held in the input_data folder, including the external data files referenced down
     - commercial buildings: most commercial building models are held in Com
       (OS_Standards). The Com need mod folder contains models for Religious
       buildings in different climate zones. The study uses the one corresponding
-      to 3B. "​​NursingHome source" contains the nursing home models from
-      https://www.sciencedirect.com/science/article/pii/S0360132320302018?casa_token=Ct-JsOrSNeYAAAAA:LVadWomEMGB-oGf3A69HCkAzhKZpeKZJ78kjKuKlcQpuFzki2By9JRU7azPgErbZhjk-y10iOg#fig4.
+      to 3B. "​​NursingHome source" contains the nursing home models from [Sun et al. 2020](https://www.sciencedirect.com/science/article/pii/S0360132320302018?casa_token=Ct-JsOrSNeYAAAAA:LVadWomEMGB-oGf3A69HCkAzhKZpeKZJ78kjKuKlcQpuFzki2By9JRU7azPgErbZhjk-y10iOg#fig4)
       The blackout incident is removed and the systems are changed to autosize.
       The adjusted model is in "NursingHome mod sched autosize"
     - residential buildings: held in "Res (CBES)" folder. "bldg_11" are
@@ -75,9 +74,8 @@ Held in the input_data folder, including the external data files referenced down
         | Model | Source |
         |-------------|-------------------|
         | single-family, multi-family | CBES |
-        | heavy and light manufacturing facilities | adapted from the warehouse
-                  model from OpenStudio Standard Gem |
-        | nursing home | [Sun et al. 2020] (https://www.sciencedirect.com/science/article/pii/S0360132320302018?casa_token=Ct-JsOrSNeYAAAAA:LVadWomEMGB-oGf3A69HCkAzhKZpeKZJ78kjKuKlcQpuFzki2By9JRU7azPgErbZhjk-y10iOg#fig4.) |
+        | heavy and light manufacturing facilities | adapted from the warehouse model from OpenStudio Standard Gem |
+        | nursing home | [Sun et al. 2020] |
         | others | OpenStudio Standard Gem |
 
     - final simulation input data files:
@@ -97,8 +95,7 @@ Held in the input_data folder, including the external data files referenced down
   electricity data. "usage_bld_therm.csv" is gas data. "usage_bld_btu.csv" is
   electricity + gas data.
 - ResStock data: simulation data set of residential buildings, downloaded from
-  this link
-  https://data.openei.org/s3_viewer?bucket=oedi-data-lake&prefix=nrel-pds-building-stock%2Fend-use-load-profiles-for-us-building-stock%2F2021%2F,
+  [this link](https://data.openei.org/s3_viewer?bucket=oedi-data-lake&prefix=nrel-pds-building-stock%2Fend-use-load-profiles-for-us-building-stock%2F2021%2F),
   resstock_tmy3_release_1/ and comstock_tmy3_release_1. The downloaded data are
   in "input_resstock" and "input_comstock" folder
 
