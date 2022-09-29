@@ -128,6 +128,32 @@ df.assessor.sqft %>%
     tidyr::spread(source, mil.sqft) %>%
     readr::write_csv("intermediate_data/cmp_Assesor_with_EnergyAtlas_sqft.csv")
 
+type.order.all = tibble::tibble(usetype=c("res_total", "single_family",
+                                          "multi_family", "condo",
+                                          "residential_other",
+                                          "residential_uncat", "commercial",
+                                          "industrial", "institutional",
+                                          "agriculture", "uncat", "other"),
+                                order=1:12) %>%
+    {.}
+
+readr::read_csv("intermediate_data/cmp_compiled_LA_geojson_with_EnergyAtlas_sqft.csv") %>%
+    dplyr::select(-percent) %>%
+    dplyr::left_join(
+               readr::read_csv("intermediate_data/cmp_Assesor_with_EnergyAtlas_sqft.csv") %>%
+               dplyr::select(-`Energy Atlas`) %>%
+               {.}
+           , by="usetype") %>%
+    dplyr::rename(`this study`=`compiled_LA_building`) %>%
+    dplyr::mutate(this.over.assessor = `this study` / Assessor,
+                  atlas.over.assessor = `Energy Atlas` / Assessor) %>%
+    dplyr::inner_join(type.order.all, by="usetype") %>%
+    dplyr::arrange(order) %>%
+    dplyr::select(-order) %>%
+    janitor::adorn_totals() %>%
+    readr::write_csv("intermediate_data/cmp_this_atlas_assessor_mil_sqft.csv")
+
+
 df.energy.county.atlas <- lapply(c("electricity", "gas", "total"), function(energy.type){
     read.energy.atlas(energy.type, do.unit.conversion = TRUE) %>%
         dplyr::filter(id.type == "counties") %>%
