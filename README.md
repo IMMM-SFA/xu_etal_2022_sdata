@@ -263,9 +263,11 @@ Following the steps to reproduce the analysis
       match the actual simulation year
 8. Use run_sim.py to run simulations
 9. Validation with measured and other data source
-   - county level: see details in verify_county.R
-   - county neighborhood: verify against Energy Atlas neighborhood data in 2016.
+    - county level: see details in verify_county.R
+    - county neighborhood: verify against Energy Atlas neighborhood data in 2016.
      See details in verify_county.R
+    - verify with ResStock and ComStock data for LA county. See details in
+      verify_resstock_comstock.R.
 10. Produce grid-level heat emission data.
 11. Produce building metadata geojson: use join_building_to_tract_finer_grid.R
 
