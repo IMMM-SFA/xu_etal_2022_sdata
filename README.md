@@ -151,7 +151,10 @@ All files have the same column structure. The hourly_heat_energy folder contains
 the compiled hourly heat emission and energy consumption data in the following
 format. The "annual_2018.csv" holds data at the 12x12km grid level. The
 "annual_2018_finer_01.csv" through "annual_2018_finer_12.csv" holds the data at
-the 450m x 450m level. Each data file corresponds to a month. The ""
+the 450m x 450m level. Each data file corresponds to a month. The
+"annual_2018_tract.csv" holds the hourly heat energy data at census tract level.
+The files with "2016" in the file names corresponds to 2016 energy and heat
+emission data.
 
 | Column name | Column definition |
 |-------------|-------------------|
