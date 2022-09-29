@@ -4,7 +4,6 @@ library("ggpmisc")
 
 sf::sf_use_s2(FALSE)
 
-df.centroid <- sf::st_read("output_data/building_metadata.geojson")
 
 la.nb.geo <- sf::st_read("input_data/EnergyAtlas/neighborhoods/neighborhoods.shp")
 
@@ -13,8 +12,20 @@ la.nb.geo.4326 <- sf::st_transform(la.nb.geo, crs=4326)
 la.nb.geo.4326.id <- la.nb.geo.4326 %>%
     dplyr::select(neighborho)
 
-df.building.nb <- sf::st_join(df.centroid, la.nb.geo.4326, join = sf::st_within) %>%
-    {.}
+if (!file.exists("intermediate_data/building_to_neighborhood_join.geojson")) {
+    df.centroid <- sf::st_read("output_data/building_metadata.geojson")
+    df.building.nb <- sf::st_join(df.centroid, la.nb.geo.4326, join = sf::st_within)
+    df.centroid %>%
+        tibble::as_tibble() %>%
+        nrow()
+    la.nb.geo.4326 %>%
+        tibble::as_tibble() %>%
+        nrow()
+    df.building.nb %>%
+        sf::st_write("intermediate_data/building_to_neighborhood_join.geojson")
+} else {
+    df.building.nb <- sf::st_read("intermediate_data/building_to_neighborhood_join.geojson")
+}
 
 df.building.nb %>%
     tibble::as_tibble() %>%
@@ -27,19 +38,14 @@ joined <- df.building.nb %>%
     {.}
 
 joined %>%
+    readr::write_csv("intermediate_data/building_id_to_nb_with_all_cols.csv")
+
+joined %>%
     distinct(neighborho) %>%
     {.}
 joined %>%
     distinct(OBJECTID) %>%
     {.}
-
-df.centroid %>%
-    tibble::as_tibble() %>%
-    nrow()
-
-la.nb.geo.4326 %>%
-    tibble::as_tibble() %>%
-    nrow()
 
 annual.sim.result.idf.epw.2016 <- readr::read_csv("intermediate_data/annual_total_result_2016.csv")
 
@@ -59,6 +65,7 @@ sim.by.nb.2016 <- joined %>%
     dplyr::mutate(value = value / prototype.m2 * building.area.m2) %>%
     tidyr::spread(variable, value) %>%
     {.}
+
 sim.by.nb.2016 %>%
     readr::write_csv("intermediate_data/annual_sim_result_by_neighborhood_2016.csv")
 
@@ -106,16 +113,15 @@ step.labels <- c("remove masked data",
                  "remove missing data",
                  "keep neighborhoods with simulation results")
 
-lapply(seq_along(dfs),
-       function(i) {
-           dfs[[i]] %>%
-               dplyr::group_by(variable) %>%
-               dplyr::summarise(num.neighborhood = length(unique(id.num)),
-                                num.record = n()) %>%
-               dplyr::ungroup() %>%
-               dplyr::mutate(step = step.labels[[i]]) %>%
-               {.}
-       }) %>%
+lapply(seq_along(dfs), function(i) {
+    dfs[[i]] %>%
+        dplyr::group_by(variable) %>%
+        dplyr::summarise(num.neighborhood = length(unique(id.num)),
+                         num.record = n()) %>%
+        dplyr::ungroup() %>%
+        dplyr::mutate(step = step.labels[[i]]) %>%
+        {.}
+}) %>%
     dplyr::bind_rows() %>%
     readr::write_csv("intermediate_data/neighborhood_atlas_filter_step.csv")
 
@@ -144,6 +150,9 @@ cmp.energy <- sim.by.nb.usetype.2016 %>%
                      {.}) %>%
     {.}
 
+cmp.energy %>%
+    readr::write_csv("neighborhood_usage_by_type_simulation_atlas_cmp_2016.csv")
+
 cmp.by.type <- cmp.energy %>%
     dplyr::group_by(id.num, usetype, variable) %>%
     dplyr::filter(n() == 2) %>%
@@ -153,8 +162,6 @@ cmp.by.type <- cmp.energy %>%
     dplyr::mutate(usage = usage * 1e-9) %>%
     dplyr::group_by(usetype) %>%
     dplyr::group_split()
-
-cmp.by.type[[1]]
 
 plot.map.cmp <- function(df, fill.col, palette.name, title.str, output.name) {
     p <- df %>%
@@ -178,6 +185,8 @@ for (df.i in cmp.by.type) {
 }
 
 plot.scatter.cmp <- function(df, title.str, output.name) {
+    limit = max(max(df$`atlas 2016`, na.rm = TRUE), max(df$`simulation 2016`, na.rm = TRUE))
+    print(limit)
     df %>%
         ggplot2::ggplot(ggplot2::aes(x=`atlas 2016`, y=`simulation 2016`)) +
         ggplot2::geom_point(size = 0.2) +
@@ -186,6 +195,7 @@ plot.scatter.cmp <- function(df, title.str, output.name) {
                                                                      after_stat(rr.label), sep = "*\", \"*"))) +
         ggplot2::geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
         ggplot2::ggtitle(title.str) +
+        ggplot2::coord_cartesian(x = c(0, limit), y = c(0, limit)) +
         ggplot2::theme()
     ggplot2::ggsave(output.name, width = 6, height = 6)
 }
@@ -225,11 +235,17 @@ cmp.energy.total <- sim.by.nb.usetype.2016 %>%
                      {.}) %>%
     {.}
 
+cmp.energy.total %>%
+    readr::write_csv("neighborhood_usage_simulation_atlas_cmp_2016.csv")
+
 cmp.total.by.fuel <- cmp.energy.total %>%
     ## kwh to TJ
     dplyr::mutate(usage = case_when(variable == "electricity" ~ usage * 0.0036 * 1e-3,
                                     variable == "gas" ~ usage * 0.10548 * 1e-3,
                                     variable == "total" ~ usage * 1.05506e-6 * 1e-3)) %>%
+    dplyr::group_by(id.num, variable) %>%
+    dplyr::filter(n() > 1) %>%
+    dplyr::ungroup() %>%
     dplyr::group_by(variable) %>%
     dplyr::group_split()
 
@@ -264,14 +280,6 @@ cmp.size <- df.keep.data.with.sim %>%
     dplyr::filter(n() == 2) %>%
     dplyr::ungroup() %>%
     dplyr::arrange(id.num, usetype, source) %>%
-    {.}
-
-cmp.size %>%
-    {.}
-
-    dplyr::group_by(usetype) %>%
-    dplyr::group_split()
-
     {.}
 
 size.by.type <- cmp.size %>%
