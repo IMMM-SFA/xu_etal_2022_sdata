@@ -41,7 +41,6 @@ df.season.avg <- df.month.hour.avg.wperm2 %>%
                                      month %in% c(6, 7, 8) ~ "summer",
                                      month %in% c(9, 10, 11) ~ "fall")) %>%
     dplyr::left_join(days, by="month") %>%
-    dplyr::select(-geoid, -area.m2) %>%
     dplyr::group_by(season, Hour) %>%
     dplyr::summarise_if(is.numeric, ~weighted.mean(., w = days.in.month)) %>%
     dplyr::ungroup() %>%
@@ -117,11 +116,6 @@ building.in.city %>%
 
 annual.sim.hourly.idf.epw.2018 <- readr::read_csv("intermediate_data/annual_sim_result_by_idf_epw_2018.csv")
 
-annual.sim.hourly.sep.by.day <- annual.sim.hourly.idf.epw.2018 %>%
-    dplyr::mutate(day = substr(`Date/Time`, 1, 5)) %>%
-    dplyr::group_by(day) %>%
-    dplyr::group_split()
-
 prototype.area <- readr::read_csv("input_data/prototype_bldg_area.csv") %>%
     dplyr::mutate(idf.kw = gsub(".idf", "", idf.name, fixed=TRUE)) %>%
     dplyr::mutate(idf.kw = gsub(".", "_", idf.kw, fixed=TRUE)) %>%
@@ -146,6 +140,8 @@ city.hourly.result <- idf.epw.area %>%
 city.hourly.result %>%
     dplyr::select(idf.kw, epw.id, building.area.m2, `Date/Time`, starts_with("emission"), starts_with("energy")) %>%
     readr::write_csv("intermediate_data/city_hourly_idf_epw_result.csv")
+
+city.hourly.result <- readr::read_csv("intermediate_data/city_hourly_idf_epw_result.csv")
 
 city.area = as.numeric(sf::st_area(city.boundary))
 
@@ -176,7 +172,8 @@ city.diurnal.by.season %>%
     ggplot2::geom_point() +
     ggplot2::ylab("Heat emission (W/m2)") +
     ggplot2::ggtitle("Hourly total heat emission (W/m2) across the city") +
-    ggplot2::theme()
+    ggplot2::expand_limits(y = 77) +
+    ggplot2::theme(plot.margin = ggplot2::margin(0.5,0.5,1.5,0.5, "cm"))
 ggplot2::ggsave("figures/diurnal_by_season_city.png", width = 8, height = 4)
 
 city.boundary %>%
