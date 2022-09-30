@@ -1,3 +1,5 @@
+library("dplyr")
+
 prototype.area <- readr::read_csv("input_data/prototype_bldg_area.csv") %>%
     dplyr::mutate(idf.kw = gsub(".idf", "", idf.name, fixed=TRUE)) %>%
     dplyr::mutate(idf.kw = gsub(".", "_", idf.kw, fixed=TRUE)) %>%
@@ -61,10 +63,8 @@ resstock.summary %>%
   readr::write_csv("intermediate_data/resstock_summary_stats.csv")
 
 ## get epw used in resstock for LA county
-
-source("read_epw.R")
-
 if (!file.exists("intermediate_data/resstock/G0600370_tmy3.epw")) {
+  source("read_epw.R")
   la.epw.base <- read.epw("input_data/M02_EnergyPlus_Forcing_Historical_LowRes/USA_CA_Los.Angeles.Intl.AP.722950_TMY3.epw")
 
   ## read resstock weather for LA county
@@ -87,6 +87,8 @@ if (!file.exists("intermediate_data/resstock/G0600370_tmy3.epw")) {
   newlines = c(lines[1:8], data.lines[2:length( data.lines)])
   writeLines(newlines, "intermediate_data/resstock/G0600370_tmy3.epw")
 }
+
+source("compile_sim_result.R")
 
 result.G0600370 <- compile.sim.result("intermediate_data/EP_output/using_G0600370", prototype.area)
 
@@ -119,7 +121,7 @@ df.comstock.la <- df.comstock %>%
   dplyr::mutate(vintage = gsub("ComStock DEER ", "", in.energy_code_followed_during_original_building_construction)) %>%
   {.}
 
-comstock.summary <- get.resstock.summary(df.comtock.la)
+comstock.summary <- get.resstock.summary(df.comstock.la)
 
 comstock.summary %>%
   readr::write_csv("intermediate_data/comstock_summary_stats.csv")
@@ -197,14 +199,20 @@ result.G0600370.compile.elec.gas.res.total <- result.G0600370.compile.elec.gas.r
   dplyr::ungroup() %>%
   {.}
 
-df.res.to.plot %>%
+df.res.to.plot <- df.res.to.plot %>%
   get.plot.df.cmp.res.com.stock.total(source.label = "ResStock", df.sim = result.G0600370.compile.elec.gas.res.total) %>%
-  ggplot2::ggplot(ggplot2::aes(x = type, y = EUI.GJ.per.m2, fill = source)) +
-  ggplot2::geom_boxplot(outlier.size = 0.2, lwd = 0.2) +
+  {.}
+
+df.res.to.plot %>%
+  dplyr::filter(source == "ResStock") %>%
+  ggplot2::ggplot() +
+  ggplot2::geom_boxplot(ggplot2::aes(x = type, y = EUI.GJ.per.m2, fill = source), outlier.size = 0.2, lwd = 0.2) +
+  ggplot2::geom_point(ggplot2::aes(x = type, y = EUI.GJ.per.m2), color = "#00BFC4",
+                        data = df.res.to.plot %>% filter(source == "this study")) +
   ggplot2::facet_wrap(vintage~., nrow = 1) +
   ggplot2::ylab("GJ/m2") +
   ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 90), legend.position = "bottom")
-ggplot2::ggsave("figures/cmp_resstock_this_study.png", width = 6, height = 6)
+ggplot2::ggsave("figures/cmp_resstock_this_study.png", width = 5, height = 6)
 
 result.G0600370.compile.elec.gas.nonres.total <- result.G0600370.compile.elec.gas %>%
   dplyr::filter(!(type %in% c("SingleFamily", "MultiFamily"))) %>%
@@ -220,12 +228,30 @@ df.com.to.plot <- df.comstock.la %>%
                                     TRUE ~ "pre 1980")) %>%
   {.}
 
-df.com.to.plot %>%
+df.com.to.plot <- df.com.to.plot %>%
   dplyr::filter(type != "SecondarySchool") %>%
   get.plot.df.cmp.res.com.stock.total(source.label = "ComStock", df.sim = result.G0600370.compile.elec.gas.nonres.total) %>%
-  ggplot2::ggplot(ggplot2::aes(x = type, y = EUI.GJ.per.m2, fill = source)) +
-  ggplot2::geom_boxplot(outlier.size = 0.2, lwd = 0.2) +
+  {.}
+
+df.com.to.plot %>%
+  dplyr::filter(source == "ComStock") %>%
+  ggplot2::ggplot() +
+  ggplot2::geom_boxplot(ggplot2::aes(x = type, y = EUI.GJ.per.m2, fill = source),
+                        outlier.size = 0.2, lwd = 0.2, show.legend = FALSE) +
+  ggplot2::geom_point(ggplot2::aes(x = type, y = EUI.GJ.per.m2), color = "#00BFC4",
+                      data = df.com.to.plot %>% filter(source == "this study")) +
   ggplot2::facet_wrap(vintage~., nrow = 1) +
   ggplot2::ylab("GJ/m2") +
-  ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 90), legend.position = "bottom")
+  ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 90))
 ggplot2::ggsave("figures/cmp_comstock_this_study.png", width = 8, height = 6)
+
+df.res.to.plot %>%
+    dplyr::filter(source == "ResStock") %>%
+    ggplot2::ggplot() +
+    ggplot2::geom_boxplot(ggplot2::aes(x = type, y = EUI.GJ.per.m2, fill = source), outlier.size = 0.2, lwd = 0.2) +
+    ggplot2::geom_point(ggplot2::aes(x = type, y = EUI.GJ.per.m2), color = "#00BFC4",
+                        data = df.res.to.plot %>% filter(source == "this study")) +
+    ggplot2::facet_wrap(vintage~., nrow = 1) +
+    ggplot2::ylab("GJ/m2") +
+    ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 90), legend.position = "bottom")
+ggplot2::ggsave("figures/cmp_resstock_this_study.png", width = 5, height = 6)
