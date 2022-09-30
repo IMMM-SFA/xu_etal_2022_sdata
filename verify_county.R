@@ -68,6 +68,36 @@ type.recode <- readr::read_csv("input_data/building_type_recode.csv") %>%
     dplyr::select(-count) %>%
     {.}
 
+options(tibble.width = Inf)
+
+to.plot.pie <- size.type.summary %>%
+    dplyr::left_join(type.recode, by=c("GeneralUseType", "SpecificUseType")) %>%
+    dplyr::group_by(`remap EP ref building`) %>%
+    dplyr::summarise_at(vars(total.building.size.mil.sqft, building.size.percent), sum) %>%
+    dplyr::ungroup() %>%
+    dplyr::arrange(desc(building.size.percent)) %>%
+    dplyr::mutate(type = ifelse(building.size.percent > 0.03, `remap EP ref building`, "other")) %>%
+    dplyr::group_by(type) %>%
+    dplyr::summarise_at(vars(total.building.size.mil.sqft, building.size.percent), sum) %>%
+    dplyr::ungroup() %>%
+    dplyr::arrange(desc(building.size.percent)) %>%
+    {.}
+
+to.plot.pie <- to.plot.pie %>%
+    arrange(desc(type)) %>%
+    mutate(prop = building.size.percent / sum(to.plot.pie$building.size.percent) *100) %>%
+    mutate(ypos = cumsum(prop)- 0.5*prop ) %>%
+    {.}
+
+ggplot2::ggplot(to.plot.pie, ggplot2::aes(x="", y=prop, fill=type)) +
+    ggplot2::geom_bar(stat="identity", width=1, color="white") +
+    ggplot2::coord_polar("y", start=0) +
+    ggplot2::theme_void() +
+    ggplot2::theme(legend.position="none") +
+    ggrepel::geom_text_repel(ggplot2::aes(y = ypos, label = type), color = "white", size=6) +
+    ggplot2::scale_fill_brewer(palette="Set2")
+ggplot2::ggsave("figures/building_type_pie.png")
+
 la.building.summary <- df.la.building.remove.geo %>%
     tibble::as_tibble() %>%
     dplyr::filter(GeneralUseType != "(missing)") %>%
@@ -152,7 +182,6 @@ readr::read_csv("intermediate_data/cmp_compiled_LA_geojson_with_EnergyAtlas_sqft
     dplyr::select(-order) %>%
     janitor::adorn_totals() %>%
     readr::write_csv("intermediate_data/cmp_this_atlas_assessor_mil_sqft.csv")
-
 
 df.energy.county.atlas <- lapply(c("electricity", "gas", "total"), function(energy.type){
     read.energy.atlas(energy.type, do.unit.conversion = TRUE) %>%
