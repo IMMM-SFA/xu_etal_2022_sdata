@@ -32,6 +32,7 @@ if (run.read.data) {
     df <- sf::st_read("intermediate_data/compiled_LA_building.geojson")
     df.centroid <- sf::st_centroid(df)
     df.grid <- sf::st_read(sprintf("%s/wrf-grids-origin.geojson", grid.path))
+    file.remove(output.name)
     df.join <- df.grid %>%
         sf::st_join(df.centroid, join=sf::st_contains) %>%
         dplyr::filter(!is.na(OBJECTID)) %>%
