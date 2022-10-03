@@ -14,8 +14,10 @@ RepoRoot = '/Applications/EnergyPlus-22-1-0'
 sys.path.insert(0, str(ProductsDir))
 from pyenergyplus.api import EnergyPlusAPI
 
-working_dir = os.path.join(os.getcwd(), "intermediate_data/idf_to_sim_2018")
-# working_dir = os.path.join(os.getcwd(), "intermediate_data/idf_add_sim_period_output_versionUpdate")
+# year = 2018
+year = 2016
+
+working_dir = os.path.join(os.getcwd(), "intermediate_data/idf_to_sim_{}".format(year))
 
 df = pd.read_csv("intermediate_data/epw_idf_to_simulate.csv")
 
@@ -25,44 +27,47 @@ df.rename(columns={"epw.id": "id"}, inplace=True)
 idfs = df['idf.name'].unique()
 idfs = [f for f in idfs if not "to be modified" in f]
 
-# annual simulation using only 2018 July WRF
-# dirname = "intermediate_data/result_ann_0520"
-# epw_path = "input_data/M02_EnergyPlus_Forcing_Historical_LowRes"
+# annual simulation using whole 2016 or 2018 WRF
+dirname = "output_data/EP_output/result_ann_WRF_{}".format(year)
+epw_path = "input_data/annual_WRF/M02_EnergyPlus_Forcing_Historical_LowRes_ann_{}".format(year)
 
-# annual simulation using whole 2018 WRF
-dirname = "intermediate_data/EP_output/result_ann_WRF_2018"
-epw_path = "input_data/annual_WRF/M02_EnergyPlus_Forcing_Historical_LowRes_ann_2018"
-# dirname = "intermediate_data/EP_output/result_ann_WRF_2016"
-# epw_path = "input_data/annual_WRF/M02_EnergyPlus_Forcing_Historical_LowRes_ann_2016"
-
-def test_run_all_model(prefix=""):
-    idfs = glob.glob("{}/{}*.idf".format(working_dir, prefix))
-    test_epw = os.path.join(os.getcwd(),
-                            "input_data/M02_EnergyPlus_Forcing_Historical_LowRes/USA_CA_Los.Angeles.Intl.AP.722950_TMY3.epw")
+def test_run_all_model(epw_path, output_folder, filter_substring=""):
+    idfs = glob.glob("{}/*.idf".format(working_dir))
+    idfs = [f for f in idfs if filter_substring in f]
+    test_epw = os.path.join(os.getcwd(), epw_path)
     api = EnergyPlusAPI()
     for idf in idfs:
         idf_name = idf.replace(".idf", "")
         idf_name = idf_name.replace(working_dir + "/", "")
         idf_kw = idf_name.replace(".", "_")
         print(idf_kw)
-        output_dir = os.path.join(os.getcwd(), "intermediate_data/EP_output/testrun/{}".format(idf_kw))
+        output_dir = os.path.join(os.getcwd(), "intermediate_data/EP_output/{}/{}".format(output_folder, idf_kw))
         if (not os.path.isdir(output_dir)):
             os.mkdir(output_dir)
-        state = api.state_manager.new_state()
-        return_value = api.runtime.run_energyplus(
-            state, [
-                '-d',
-                output_dir,
-                '-D',
-                '-w',
-                test_epw,
-                '-r',
-                idf
-            ]
-        )
-        api.state_manager.delete_state(state)
+            state = api.state_manager.new_state()
+            return_value = api.runtime.run_energyplus(
+                state, [
+                    '-d',
+                    output_dir,
+                    '-w',
+                    test_epw,
+                    '-r',
+                    idf
+                ]
+            )
+            api.state_manager.delete_state(state)
 
-test_run_all_model("")
+# test_run_all_model("input_data/M02_EnergyPlus_Forcing_Historical_LowRes/USA_CA_Los.Angeles.Intl.AP.722950_TMY3.epw", "testrun")
+
+# run all models using the same weather file as PNNL reference model
+# test_run_all_model("input_data/scorecards/USA_TX_El.Paso_.Intl_.AP_.722700_TMY3.epw", "using_el_paso")
+
+# run all models using the same weather file as NREL reference model
+# test_run_all_model("input_data/scorecards/3B_USA_NV_LAS_VEGAS_TMY2.epw", "using_LA_tmy2", "Pre-1980")
+# test_run_all_model("input_data/scorecards/3B_USA_NV_LAS_VEGAS_TMY2.epw", "using_LA_tmy2", "pre-1980")
+
+# run all models using the same weather file as ResStock and ComStock
+test_run_all_model("intermediate_data/resstock/G0600370_tmy3.epw", "using_G0600370", "")
 
 def run_sim_with_idf_epw_df(df_idf_epw):
     api = EnergyPlusAPI()
@@ -94,45 +99,21 @@ def run_sim_with_idf_epw_df(df_idf_epw):
             )
             api.state_manager.delete_state(state)
 
-sim_to_run = df[df['idf.name'].isin(idfs)]
-n_thread = 5
-k = len(sim_to_run) // n_thread
-dfs = [sim_to_run.iloc[k*i:k*(i+1), :] for i in range(n_thread - 1)]
-dfs.append(sim_to_run.iloc[k*(n_thread - 1):max(k*n_thread, len(sim_to_run)), :])
+def run_multi_thread(n_thread):
+    sim_to_run = df[df['idf.name'].isin(idfs)]
+    k = len(sim_to_run) // n_thread
+    dfs = [sim_to_run.iloc[k*i:k*(i+1), :] for i in range(n_thread - 1)]
+    dfs.append(sim_to_run.iloc[k*(n_thread - 1):max(k*n_thread, len(sim_to_run)), :])
 
-Parallel(n_jobs=n_thread)(delayed(run_sim_with_idf_epw_df)(dfs[i]) for i in range(n_thread))
+    Parallel(n_jobs=n_thread)(delayed(run_sim_with_idf_epw_df)(dfs[i]) for i in range(n_thread))
 
-# idf_name does not have ".idf"
-def run_one(idf_name, epw_id):
-    api = EnergyPlusAPI()
-    print("epw: {}, idf: {}".format(epw_id, idf_name))
-    idf_kw = idf_name.replace(".", "_")
-    # output dir for annual simulation
-    output_dir = os.path.join(os.getcwd(), "{}/{}____{:d}".format(dirname, idf_kw, epw_id))
-    # output_dir = os.path.join(os.getcwd(), working_dir, "{}____{:d}".format(idf_kw, epw_id))
-    if (not os.path.isdir(output_dir)):
-        os.mkdir(output_dir)
-        # the epw file can run, but the idf has issue
-    state = api.state_manager.new_state()
-    return_value = api.runtime.run_energyplus(
-        state, [
-            '-d',
-            output_dir,
-            # annual simulation comparing with EnergyAtlas
-            '-a',
-            '-w',
-            os.path.join(os.getcwd(), '{}/wrf_epw'.format(epw_path), '{:d}.epw'.format(epw_id)),
-            '-r',
-            os.path.join(os.getcwd(), working_dir, "{}.idf".format(idf_name))
-        ]
-    )
-    api.state_manager.delete_state(state)
+run_multi_thread(4)
 
-combos = [
-"SingleFamily-pre-1980____68"
-]
+# if needs rerun certain idf-epw combination, do the following
+combos = ["MultiFamily-pre-1980____53", "Religious-pre-1980-3B____53",
+          "Religious-post-1980-3B____93"]
 
-# rerun certain list of simulation combos.
 for combo in combos:
-    tokens = combo.split("____")
-    run_one(tokens[0], int(tokens[1]))
+    shutil.rmtree(os.path.join(os.getcwd(), "{}/{}".format(dirname, combo)))
+
+run_multi_thread(5)
