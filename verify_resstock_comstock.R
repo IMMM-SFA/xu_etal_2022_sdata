@@ -246,12 +246,12 @@ df.com.to.plot %>%
 ggplot2::ggsave("figures/cmp_comstock_this_study.png", width = 8, height = 6)
 
 df.res.to.plot %>%
-    dplyr::filter(source == "ResStock") %>%
-    ggplot2::ggplot() +
-    ggplot2::geom_boxplot(ggplot2::aes(x = type, y = EUI.GJ.per.m2, fill = source), outlier.size = 0.2, lwd = 0.2) +
-    ggplot2::geom_point(ggplot2::aes(x = type, y = EUI.GJ.per.m2), color = "#00BFC4",
-                        data = df.res.to.plot %>% filter(source == "this study")) +
-    ggplot2::facet_wrap(vintage~., nrow = 1) +
-    ggplot2::ylab("GJ/m2") +
-    ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 90), legend.position = "bottom")
+  dplyr::filter(source == "ResStock") %>%
+  ggplot2::ggplot() +
+  ggplot2::geom_boxplot(ggplot2::aes(x = type, y = EUI.GJ.per.m2, fill = source), outlier.size = 0.2, lwd = 0.2) +
+  ggplot2::geom_point(ggplot2::aes(x = type, y = EUI.GJ.per.m2), color = "#00BFC4",
+                      data = df.res.to.plot %>% filter(source == "this study")) +
+  ggplot2::facet_wrap(vintage~., nrow = 1) +
+  ggplot2::ylab("GJ/m2") +
+  ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 90), legend.position = "bottom")
 ggplot2::ggsave("figures/cmp_resstock_this_study.png", width = 5, height = 6)
