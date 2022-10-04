@@ -36,6 +36,7 @@ filled.dfs <- df.all.epw %>%
 for (df in filled.dfs) {
     filename = df$filename[[1]]
     df %>%
+        dplyr::select(-filename, -cell.id) %>%
         readr::write_csv(sprintf("%s/wrf_epw/%s", climate.folder, gsub("epw", "csv", filename)))
 }
 
