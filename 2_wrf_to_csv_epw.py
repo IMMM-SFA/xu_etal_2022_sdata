@@ -27,12 +27,13 @@ wrf_headers = ['PSFC', 'Q2', 'T2', 'RH', 'WINDS', 'GLW', 'SWDOWN', 'WINDD']
 # heat_year = 2018
 # WRF_FOLDER = 'M02_EnergyPlus_Forcing_Historical_LowRes'
 # for annual 2018 data
-# heat_year = 2018
-# WRF_FOLDER = 'annual_WRF/M02_EnergyPlus_Forcing_Historical_LowRes_ann_2018'
+heat_year = 2018
+WRF_FOLDER = 'input_data/annual_WRF/M02_EnergyPlus_Forcing_Historical_LowRes_ann_2018'
+leap_year = False
 # for annual 2016 data
-WRF_FOLDER = 'annual_WRF/M02_EnergyPlus_Forcing_Historical_LowRes_ann_2016'
-heat_year = 2016
-leap_year = True
+# WRF_FOLDER = 'input_data/annual_WRF/M02_EnergyPlus_Forcing_Historical_LowRes_ann_2016'
+# heat_year = 2016
+# leap_year = True
 
 # # before extend period
 # heat_month = [7]
@@ -61,7 +62,7 @@ col = 14
 
 
 valid_wrf_grids = set()
-with open(os.getcwd() + '/M02_EnergyPlus_Forcing_Historical_LowRes/meta/wrf-grids-2229.geojson', 'r') as f:
+with open(os.getcwd() + '/input_data/M02_EnergyPlus_Forcing_Historical_LowRes/meta/wrf-grids-2229.geojson', 'r') as f:
     data = json.load(f)
     
     for wrf_grid in data['features']:
