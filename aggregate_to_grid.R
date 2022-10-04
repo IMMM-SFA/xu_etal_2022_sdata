@@ -5,16 +5,15 @@ library("tmap")
 ## ## heat wave period
 ## result.file = "sim_result_by_idf_epw.csv"
 ## annual 2018
-year = 2016
-result.file = sprintf("intermediate_data/annual_sim_result_by_idf_epw_%d.csv", year)
-time.pref = sprintf("annual_%d", year)
-result <- readr::read_csv(result.file)
 
-result.by.time <- result %>%
-    dplyr::group_by(`Date/Time`) %>%
-    dplyr::group_split()
+compile.grid.data <- function(grid.level, year) {
+    result.file = sprintf("intermediate_data/annual_sim_result_by_idf_epw_%d.csv", year)
+    time.pref = sprintf("annual_%d", year)
+    result <- readr::read_csv(result.file)
 
-compile.grid.data <- function(grid.level, time.pref) {
+    result.by.time <- result %>%
+        dplyr::group_by(`Date/Time`) %>%
+        dplyr::group_split()
 
     if (grid.level == "coarse") {
         grid.path = "input_data/M02_EnergyPlus_Forcing_Historical_LowRes/meta"
@@ -190,9 +189,14 @@ compile.grid.data <- function(grid.level, time.pref) {
 
 }
 
-for (grid.level in c("coarse", "finer", "tract")) {
-    compile.grid.data(grid.level, time.pref)
+for (year in c(2018, 2016)) {
+    for (grid.level in c("coarse", "finer", "tract")) {
+        compile.grid.data(grid.level, year)
+    }
+}
 
+
+for (grid.level in c("coarse", "finer", "tract")) {
     ## get monthly total, and monthly diurnal profile (month-hour average)
     if (grid.level == "finer") {
         lapply(months, function(month.str) {
@@ -244,4 +248,3 @@ for (grid.level in c("coarse", "finer", "tract")) {
         print(sprintf("write to: intermediate_data/diurnal/%s%s_hourly_avg_month.csv", time.pref, grid.suf))
     }
 }
-
