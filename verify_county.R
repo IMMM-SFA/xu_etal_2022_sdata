@@ -37,6 +37,44 @@ size.type.summary <- df.la.building.remove.geo %>%
     dplyr::arrange(desc(building.size.percent)) %>%
     {.}
 
+## top four GeneralUseType
+## GeneralUseType total.building.size
+## <fct>                        <dbl>
+## 1 Residential              4078.    
+## 2 Industrial                809.    
+## 3 Commercial                730.    
+## 4 Institutional             124.    
+## 5 Recreational               21.2   
+df.la.building.remove.geo %>%
+    dplyr::group_by(GeneralUseType) %>%
+    dplyr::summarise(total.building.size = sum(SQFTmain) * 1e-6) %>%
+    dplyr::ungroup() %>%
+    dplyr::arrange(desc(total.building.size)) %>%
+    {.}
+
+data.median <- df.la.building.remove.geo %>%
+    dplyr::filter(GeneralUseType %in% c("Residential", "Industrial", "Commercial", "Institutional")) %>%
+    dplyr::group_by(GeneralUseType) %>%
+    dplyr::summarise(EffectiveYearBuilt = median(EffectiveYearBuilt)) %>%
+    dplyr::ungroup()
+
+df.la.building.remove.geo %>%
+    dplyr::filter(GeneralUseType %in% c("Residential", "Industrial", "Commercial", "Institutional")) %>%
+    ggplot2::ggplot() +
+    ggplot2::geom_violin(ggplot2::aes(x = GeneralUseType, y = EffectiveYearBuilt),
+                         position = ggplot2::position_dodge(width = 0.5)) +
+    ggplot2::geom_boxplot(ggplot2::aes(x = GeneralUseType, y = EffectiveYearBuilt),
+                          width = 0.2, position = ggplot2::position_dodge(width = 0.5)) +
+    ggplot2::geom_hline(yintercept = 1980, linetype = "dashed") +
+    ggplot2::geom_text(ggplot2::aes(x = GeneralUseType, y = EffectiveYearBuilt, label = EffectiveYearBuilt),
+                       data = data.median, size = 3, vjust = -0.5) +
+    ggplot2::ylab("Year Built (EffectiveYearBuilt)") +
+    ggplot2::theme()
+ggplot2::ggsave("figures/built_year_by_main_GeneralUseType.png")
+
+size.type.summary %>%
+    readr::write_csv("intermediate_data/compiled_LA_size_type_summary.csv")
+
 quartile.stats.by.type <- df.la.building.remove.geo %>%
     tibble::as_tibble() %>%
     dplyr::select(-(Shape_Area:remap.Energy.Atlas)) %>%
@@ -70,6 +108,8 @@ type.recode <- readr::read_csv("input_data/building_type_recode.csv") %>%
 
 options(tibble.width = Inf)
 
+size.type.summary <- readr::read_csv("intermediate_data/compiled_LA_size_type_summary.csv")
+
 to.plot.pie <- size.type.summary %>%
     dplyr::left_join(type.recode, by=c("GeneralUseType", "SpecificUseType")) %>%
     dplyr::group_by(`remap EP ref building`) %>%
@@ -94,8 +134,8 @@ ggplot2::ggplot(to.plot.pie, ggplot2::aes(x="", y=prop, fill=type)) +
     ggplot2::coord_polar("y", start=0) +
     ggplot2::theme_void() +
     ggplot2::theme(legend.position="none") +
-    ggrepel::geom_text_repel(ggplot2::aes(y = ypos, label = type), color = "white", size=6) +
-    ggplot2::scale_fill_brewer(palette="Set2")
+    ggrepel::geom_text_repel(ggplot2::aes(y = ypos, label = type), color = "black", size=6) +
+    ggplot2::scale_fill_brewer(palette="Set1")
 ggplot2::ggsave("figures/building_type_pie.png")
 
 la.building.summary <- df.la.building.remove.geo %>%
