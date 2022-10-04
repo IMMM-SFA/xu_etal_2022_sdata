@@ -266,15 +266,17 @@ get.agg.sim.energy.by.atlas.type <- function(df) {
         {.}
 }
 
+annual.sim.result.idf.epw.2018 <- readr::read_csv("intermediate_data/annual_total_result_2018.csv")
+
 agg.by.energy.atlas.type.2018 <- get.agg.sim.energy.by.atlas.type(annual.sim.result.idf.epw.2018)
 
-cec.2018 <- readr::read_csv("input_data/CECdata/ElectricityByCounty_2018.csv") %>%
+cec.2018.elec <- readr::read_csv("input_data/CECdata/ElectricityByCounty_2018.csv") %>%
     dplyr::select(-`Total Usage`, -County) %>%
     dplyr::rename(electricity.Gwh = `2018`) %>%
     dplyr::mutate(source = "CEC") %>%
     {.}
 
-cec.2018 
+cec.2018.elec
 
 agg.by.energy.atlas.type.2018 %>%
     dplyr::select(usetype, energy.elec) %>%
@@ -286,10 +288,34 @@ agg.by.energy.atlas.type.2018 %>%
     dplyr::rename(electricity.Gwh = energy.elec) %>%
     janitor::adorn_totals() %>%
     dplyr::mutate(source = "this study") %>%
-    dplyr::bind_rows(cec.2018) %>%
+    dplyr::bind_rows(cec.2018.elec) %>%
     tidyr::spread(source, electricity.Gwh) %>%
     dplyr::mutate(ratio = `this study` / CEC) %>%
 readr::write_csv("intermediate_data/sim_elec_cmp_CEC_2018.csv")
+
+cec.2018.gas <- readr::read_csv("input_data/CECdata/GasByCounty_2018.csv") %>%
+    dplyr::select(-`Total Usage`, -County) %>%
+    dplyr::rename(gas.Gtherm = `2018`) %>%
+    dplyr::mutate(source = "CEC") %>%
+    {.}
+
+cec.2018.gas
+
+agg.by.energy.atlas.type.2018 %>%
+    dplyr::select(usetype, energy.gas) %>%
+    ## million therm
+    dplyr::mutate(energy.gas = energy.gas * 9.48043e-9 * 1e-6) %>%
+    dplyr::mutate(Sector = ifelse(usetype %in% c("single_family", "multi_family", "residential_other"), "Residential", "Non-Residential")) %>%
+    dplyr::group_by(Sector) %>%
+    dplyr::summarise(energy.gas = sum(energy.gas)) %>%
+    dplyr::ungroup() %>%
+    dplyr::rename(gas.Gtherm = energy.gas) %>%
+    janitor::adorn_totals() %>%
+    dplyr::mutate(source = "this study") %>%
+    dplyr::bind_rows(cec.2018.gas) %>%
+    tidyr::spread(source, gas.Gtherm) %>%
+    dplyr::mutate(ratio = `this study` / CEC) %>%
+readr::write_csv("intermediate_data/sim_gas_cmp_CEC_2018.csv")
 
 get.agg.sim.energy.by.atlas.type(annual.sim.result.idf.epw.2016)
     readr::write_csv("intermediate_data/energy_emission_by_EnergyAtlas_type_2016.csv")
