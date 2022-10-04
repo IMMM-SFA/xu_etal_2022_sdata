@@ -14,10 +14,6 @@ result.by.time <- result %>%
     dplyr::group_by(`Date/Time`) %>%
     dplyr::group_split()
 
-## grid.level = "finer"
-## grid.level = "coarse"
-grid.level = "tract"
-
 compile.grid.data <- function(grid.level, time.pref) {
 
     if (grid.level == "coarse") {
@@ -194,57 +190,58 @@ compile.grid.data <- function(grid.level, time.pref) {
 
 }
 
-compile.grid.data("coarse", time.pref)
+for (grid.level in c("coarse", "finer", "tract")) {
+    compile.grid.data(grid.level, time.pref)
 
-compile.grid.data("finer", time.pref)
-
-## get monthly total, and monthly diurnal profile (month-hour average)
-if (grid.level == "finer") {
-    lapply(months, function(month.str) {
-        print(month.str)
-        df.month.i <-
-            readr::read_csv(sprintf("output_data/hourly_heat_energy/%s%s_%s.csv", time.pref, grid.suf, month.str))
-        df.month.i %>%
-            dplyr::group_by(geoid) %>%
+    ## get monthly total, and monthly diurnal profile (month-hour average)
+    if (grid.level == "finer") {
+        lapply(months, function(month.str) {
+            print(month.str)
+            df.month.i <-
+                readr::read_csv(sprintf("output_data/hourly_heat_energy/%s%s_%s.csv", time.pref, grid.suf, month.str))
+            df.month.i %>%
+                dplyr::group_by(geoid) %>%
+                dplyr::summarise_if(is.numeric, sum) %>%
+                dplyr::ungroup() %>%
+                dplyr::mutate(month = month.str) %>%
+                dplyr::select(month, geoid, everything())
+        }) %>%
+            dplyr::bind_rows() %>%
+            readr::write_csv(sprintf("intermediate_data/monthly_heat_energy/%d_monthly%s.csv", year, grid.suf))
+        lapply(months, function(month.str) {
+            print(month.str)
+            df.month.i <-
+                readr::read_csv(sprintf("output_data/hourly_heat_energy/%s%s_%s.csv", time.pref, grid.suf, month.str))
+            df.month.i %>%
+                dplyr::mutate(month = month.str) %>%
+                tidyr::separate(timestamp, into=c("Date", "Hour"), sep="  ") %>%
+                dplyr::mutate(Hour=as.numeric(gsub(":00:00", "", Hour))) %>%
+                dplyr::group_by(month, Hour, geoid) %>%
+                dplyr::summarise_if(is.numeric, mean) %>%
+                dplyr::ungroup()
+        }) %>%
+            dplyr::bind_rows() %>%
+            readr::write_csv(sprintf("intermediate_data/diurnal/%s%s_hourly_avg_month.csv", time.pref, grid.suf))
+    } else {
+        df.year <- readr::read_csv(sprintf("output_data/hourly_heat_energy/%s%s.csv", time.pref, grid.suf))
+        df.year %>%
+            tidyr::separate(timestamp, into=c("month", "other"), sep="/") %>%
+            dplyr::select(-other) %>%
+            dplyr::group_by(month, geoid) %>%
             dplyr::summarise_if(is.numeric, sum) %>%
             dplyr::ungroup() %>%
-            dplyr::mutate(month = month.str) %>%
-            dplyr::select(month, geoid, everything())
-    }) %>%
-        dplyr::bind_rows() %>%
-        readr::write_csv(sprintf("intermediate_data/monthly_heat_energy/%d_monthly%s.csv", year, grid.suf))
-    lapply(months, function(month.str) {
-        print(month.str)
-        df.month.i <-
-            readr::read_csv(sprintf("output_data/hourly_heat_energy/%s%s_%s.csv", time.pref, grid.suf, month.str))
-        df.month.i %>%
-            dplyr::mutate(month = month.str) %>%
-            tidyr::separate(timestamp, into=c("Date", "Hour"), sep="  ") %>%
+            readr::write_csv(sprintf("intermediate_data/monthly_heat_energy/%d_monthly%s.csv", year, grid.suf))
+        print(sprintf("write to: intermediate_data/monthly_heat_energy/%d_monthly%s.csv", year, grid.suf))
+        df.year %>%
+            tidyr::separate(timestamp, into=c("month", "other"), sep="/") %>%
+            tidyr::separate(other, into=c("Date", "Hour"), sep="  ") %>%
             dplyr::mutate(Hour=as.numeric(gsub(":00:00", "", Hour))) %>%
+            dplyr::select(-Date) %>%
             dplyr::group_by(month, Hour, geoid) %>%
             dplyr::summarise_if(is.numeric, mean) %>%
-            dplyr::ungroup()
-    }) %>%
-        dplyr::bind_rows() %>%
-        readr::write_csv(sprintf("intermediate_data/diurnal/%s%s_hourly_avg_month.csv", time.pref, grid.suf))
-} else {
-    df.year <- readr::read_csv(sprintf("output_data/hourly_heat_energy/%s%s.csv", time.pref, grid.suf))
-    df.year %>%
-        tidyr::separate(timestamp, into=c("month", "other"), sep="/") %>%
-        dplyr::select(-other) %>%
-        dplyr::group_by(month, geoid) %>%
-        dplyr::summarise_if(is.numeric, sum) %>%
-        dplyr::ungroup() %>%
-        readr::write_csv(sprintf("intermediate_data/monthly_heat_energy/%d_monthly%s.csv", year, grid.suf))
-    print(sprintf("write to: intermediate_data/monthly_heat_energy/%d_monthly%s.csv", year, grid.suf))
-    df.year %>%
-        tidyr::separate(timestamp, into=c("month", "other"), sep="/") %>%
-        tidyr::separate(other, into=c("Date", "Hour"), sep="  ") %>%
-        dplyr::mutate(Hour=as.numeric(gsub(":00:00", "", Hour))) %>%
-        dplyr::select(-Date) %>%
-        dplyr::group_by(month, Hour, geoid) %>%
-        dplyr::summarise_if(is.numeric, mean) %>%
-        dplyr::ungroup() %>%
-        readr::write_csv(sprintf("intermediate_data/diurnal/%s%s_hourly_avg_month.csv", time.pref, grid.suf))
-    print(sprintf("write to: intermediate_data/diurnal/%s%s_hourly_avg_month.csv", time.pref, grid.suf))
+            dplyr::ungroup() %>%
+            readr::write_csv(sprintf("intermediate_data/diurnal/%s%s_hourly_avg_month.csv", time.pref, grid.suf))
+        print(sprintf("write to: intermediate_data/diurnal/%s%s_hourly_avg_month.csv", time.pref, grid.suf))
+    }
 }
+
