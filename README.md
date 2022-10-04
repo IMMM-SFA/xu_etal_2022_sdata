@@ -285,23 +285,9 @@ Following the steps to reproduce the analysis
     compile.grid.data() for certain grid level (or census tract) and year.
 11. Produce building metadata geojson: use join_building_to_tract_finer_grid.R
 
-<!-- Run the following scripts in the `workflow` directory to re-create this experiment: -->
-
-<!-- | Script Name | Description | How to Run | -->
-<!-- | --- | --- | --- | -->
-<!-- | `step_one.py` | Script to run the first part of my experiment | `python3 step_one.py -f /path/to/inputdata/file_one.csv` | -->
-<!-- | `step_two.py` | Script to run the last part of my experiment | `python3 step_two.py -o /path/to/my/outputdir` | -->
-
-<!-- 4. Download and unzip the output data from my experiment [Output data](#output-data) -->
-<!-- 5. Run the following scripts in the `workflow` directory to compare my outputs to those from the publication -->
-
-<!-- | Script Name | Description | How to Run | -->
-<!-- | --- | --- | --- | -->
-<!-- | `compare.py` | Script to compare my outputs to the original | `python3 compare.py --orig /path/to/original/data.csv --new /path/to/new/data.csv` | -->
-
 ## Reproduce my figures
-Fixme: add rmd files
 <!-- Use the scripts found in the `figures` directory to reproduce the figures used in this publication. -->
+Refer to rmd/figures.Rmd
 
 <!-- | Script Name | Description | How to Run | -->
 <!-- | --- | --- | --- | -->
