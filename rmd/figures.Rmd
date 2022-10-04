@@ -52,7 +52,7 @@ ggplot2::ggplot(to.plot.pie, ggplot2::aes(x="", y=prop, fill=type)) +
 
 Figure 4
 
-```{r figure4, eval=FALSE}
+```{r figure4, eval=TRUE}
 if (!file.exists("intermediate_data/df_la_building_year_size.csv")) {
   ## this is before joining to grid
   df.la.building <- sf::st_read("intermediate_data/compiled_LA_building.geojson")
@@ -108,7 +108,7 @@ df.la.building.remove.geo %>%
 
 Figure 5
 
-```{r figure5, eval=FALSE}
+```{r figure5, eval=TRUE}
 grid.path = "input_data/M02_EnergyPlus_Forcing_Historical_LowRes/meta"
 df.grid <- sf::st_read(sprintf("%s/wrf-grids-origin.geojson", grid.path))
 la.boundary <- sf::read_sf("input_data/domain/la-county-boundary.geojson")
@@ -122,7 +122,7 @@ df.grid %>%
 
 Figure 6
 
-```{r figure6, fig.width=10, eval=FALSE}
+```{r figure6, fig.width=10, eval=TRUE}
 
 if (!file.exists("intermediate_data/weather_2018.csv")) {
   ## for july data
@@ -181,7 +181,7 @@ df.weather.with.cell %>%
 
 Figure 7
 
-```{r figure7, eval=FALSE}
+```{r figure7, eval=TRUE}
 ## to be added
 if (!file.exists("intermediate_data/resstock_la.csv")) {
   df.restock = readr::read_tsv("input_data/resstock/metadata.tsv")
@@ -284,7 +284,7 @@ df.res.to.plot %>%
 
 Figure 8
 
-```{r figure8, eval=FALSE}
+```{r figure8, eval=TRUE}
 if (!file.exists("intermediate_data/comstock_la.csv")) {
   df.comstock = readr::read_tsv("input_data/comstock/metadata.tsv")
   df.comstock.la <- df.comstock %>%
@@ -357,6 +357,212 @@ df.com.to.plot %>%
 
 Figure 9
 
-```{r code}
-## to be added
+```{r figure9, out.width="50%", fig.show="hold", eval=TRUE}
+library("tmap")
+library("ggpmisc")
+
+la.nb.geo <- sf::st_read("input_data/EnergyAtlas/neighborhoods/neighborhoods.shp")
+
+la.nb.geo.4326 <- sf::st_transform(la.nb.geo, crs=4326)
+
+la.nb.geo.4326.id <- la.nb.geo.4326 %>%
+  dplyr::select(neighborho)
+
+plot.map.cmp <- function(df, fill.col, palette.name, title.str, output.name) {
+  p <- df %>%
+    dplyr::inner_join(la.nb.geo.4326.id, by=c("id.num"="neighborho")) %>%
+    sf::st_as_sf() %>%
+    tm_shape() +
+    tm_polygons(fill.col, n=10, style="quantile", palette=palette.name) +
+    tm_facets(by="source") +
+    tm_layout(main.title = title.str,
+              legend.position=c("left", "bottom"), legend.outside=FALSE)
+  print(p)
+  ## tmap_save(p, output.name, height=5)
+}
+
+plot.scatter.cmp <- function(df, title.str, output.name) {
+  limit = max(max(df$`atlas 2016`, na.rm = TRUE), max(df$`simulation 2016`, na.rm = TRUE))
+  p <- df %>%
+    ggplot2::ggplot(ggplot2::aes(x=`atlas 2016`, y=`simulation 2016`)) +
+    ggplot2::geom_point(size = 0.2) +
+    ggpmisc::stat_poly_line(formula = y ~ 0 + x) +
+    ggpmisc::stat_poly_eq(formula = y ~ 0 + x, aes(label = paste(after_stat(eq.label),
+                                                                 after_stat(rr.label), sep = "*\", \"*"))) +
+    ggplot2::geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+    ggplot2::ggtitle(title.str) +
+    ggplot2::coord_cartesian(x = c(0, limit), y = c(0, limit)) +
+    ggplot2::theme()
+  print(p)
+  ## ggplot2::ggsave(output.name, width = 6, height = 6)
+}
+
+cmp.energy.total <- readr::read_csv("neighborhood_usage_simulation_atlas_cmp_2016.csv")
+
+cmp.total.by.fuel <- cmp.energy.total %>%
+  ## kwh to TJ
+  dplyr::mutate(usage = case_when(variable == "electricity" ~ usage * 0.0036 * 1e-3,
+                                  variable == "gas" ~ usage * 0.10548 * 1e-3,
+                                  variable == "total" ~ usage * 1.05506e-6 * 1e-3)) %>%
+  dplyr::group_by(id.num, variable) %>%
+  dplyr::filter(n() > 1) %>%
+  dplyr::ungroup() %>%
+  dplyr::group_by(variable) %>%
+  dplyr::group_split()
+
+for (df.j in cmp.total.by.fuel) {
+  fuel.j = df.j$variable[[1]]
+  plot.map.cmp(df.j, fill.col="usage", palette.name="YlOrRd",
+               title.str=sprintf(sprintf("%s (GBtu)", fuel.j)),
+               output.name=sprintf("figures/cmp_neighbor_total_by_fuel_%s.png", fuel.j))
+  ## df.j %>%
+  ##   tidyr::spread(source, usage) %>%
+  ##   plot.scatter.cmp(sprintf("%s (GBtu) comparison", fuel.j),
+  ##                    sprintf("figures/scatter_neighbor_total_by_fuel_%s.png", fuel.j))
+}
+```
+
+Figure 10-11
+
+```{r figure10to11, out.width="50%", fig.show="hold", eval=TRUE}
+
+source("read_energyAtlas.R")
+
+df.energy.county.nb.remove.masked <- lapply(c("electricity", "gas", "total"), function(energy.type){
+    read.energy.atlas(energy.type, remove.masked.data = TRUE) %>%
+        dplyr::filter(id.type == "neighborhoods") %>%
+        dplyr::select(id.num, usetype, usage, sqft) %>%
+        dplyr::mutate(usage = as.numeric(usage)) %>%
+        dplyr::mutate(variable = energy.type) %>%
+        {.}
+}) %>%
+    dplyr::bind_rows() %>%
+    {.}
+
+df.remove.na <- df.energy.county.nb.remove.masked %>%
+    dplyr::filter(!is.na(usage))
+
+sim.by.nb.2016 <- readr::read_csv("intermediate_data/annual_sim_result_by_neighborhood_2016.csv")
+
+nb.with.simulation.data <- sim.by.nb.2016 %>%
+  dplyr::distinct(neighborho)
+
+df.keep.data.with.sim <- df.remove.na %>%
+    dplyr::mutate(id.num = as.numeric(id.num)) %>%
+    dplyr::inner_join(nb.with.simulation.data, by=c("id.num"="neighborho")) %>%
+    {.}
+
+sim.by.nb.usetype.2016 <- sim.by.nb.2016 %>%
+  dplyr::select(neighborho, usetype, building.area.m2, starts_with("energy")) %>%
+  ## J to kwh
+  dplyr::mutate(electricity = energy.elec * 2.77778e-7,
+                ## J to therm
+                gas = energy.gas * 9.48043e-9,
+                ## J to btu
+                total = energy.overall * 0.000947817) %>%
+  dplyr::select(-starts_with("energy")) %>%
+  dplyr::group_by(neighborho, usetype) %>%
+  dplyr::summarise_if(is.numeric, sum) %>%
+  dplyr::ungroup() %>%
+  {.}
+
+cmp.size <- df.keep.data.with.sim %>%
+  dplyr::select(-usage) %>%
+  dplyr::filter(variable == "total") %>%
+  dplyr::select(-variable) %>%
+  dplyr::mutate(building.area.m2 = sqft * 0.0929) %>%
+  dplyr::select(-sqft) %>%
+  dplyr::mutate(source = "atlas 2016") %>%
+  dplyr::bind_rows(sim.by.nb.usetype.2016 %>%
+                   dplyr::select(neighborho, usetype, building.area.m2) %>%
+                   dplyr::rename(id.num = neighborho) %>%
+                   dplyr::mutate(source = "simulation 2016") %>%
+                   {.}) %>%
+  dplyr::group_by(id.num, usetype) %>%
+  dplyr::filter(n() == 2) %>%
+  dplyr::ungroup() %>%
+  dplyr::arrange(id.num, usetype, source) %>%
+  {.}
+
+size.by.type <- cmp.size %>%
+  dplyr::filter(usetype %in% c("single_family", "multi_family")) %>%
+  dplyr::mutate(building.area.thousand.m2 = building.area.m2 * 1e-3) %>%
+  dplyr::select(-building.area.m2) %>%
+  dplyr::group_by(usetype) %>%
+  dplyr::group_split()
+
+## plot by each usetype
+for (df.i in size.by.type) {
+  type.i = df.i$usetype[[1]]
+  ## print(type.i)
+  plot.map.cmp(df.i, "building.area.thousand.m2", "Purples",
+               sprintf("%s building size (thousand m2)", type.i),
+               sprintf("figures/cmp_neighbor_bld_size_%s.png", type.i))
+  df.i %>%
+    tidyr::spread(source, building.area.thousand.m2) %>%
+    plot.scatter.cmp(
+      sprintf("%s building size compare (thousand m2)", type.i),
+      sprintf("figures/scatter_neighbor_bld_size_%s.png", type.i))
+}
+```
+
+Figure 12-13
+
+```{r figure12to13, out.width="50%", fig.show="hold", eval=TRUE}
+
+cmp.energy <- readr::read_csv("neighborhood_usage_by_type_simulation_atlas_cmp_2016.csv")
+
+cmp.by.type <- cmp.energy %>%
+  dplyr::group_by(id.num, usetype, variable) %>%
+  dplyr::filter(n() == 2) %>%
+  dplyr::ungroup() %>%
+  dplyr::arrange(id.num, usetype, variable, source) %>%
+  dplyr::filter(variable == "total") %>%
+  dplyr::mutate(usage = usage * 1e-9) %>%
+  dplyr::filter(usetype %in% c("single_family", "multi_family")) %>%
+  dplyr::group_by(usetype) %>%
+  dplyr::group_split()
+
+for (df.i in cmp.by.type) {
+  type.i = df.i$usetype[[1]]
+  print(type.i)
+  plot.map.cmp(df.i, "usage", "YlOrRd",
+               sprintf("%s building electricity + gas (GBtu)", type.i),
+               sprintf("figures/cmp_neighbor_btu_total_%s.png", type.i))
+  df.i %>%
+    dplyr::filter(variable == "total") %>%
+    dplyr::mutate(usage = usage * 1e-9) %>%
+    tidyr::spread(source, usage) %>%
+    plot.scatter.cmp(sprintf("Electricity + Gas (GBtu) comparison for %s building", type.i),
+                     sprintf("figures/scatter_neighbor_btu_total_%s.png", type.i))
+}
+```
+
+Figure 14
+
+```{r figure14, eval=TRUE}
+data.2016 <- readr::read_csv("output_data/hourly_heat_energy/annual_2016.csv")
+data.2018 <- readr::read_csv("output_data/hourly_heat_energy/annual_2018.csv")
+
+annual.total.2016 <- data.2016 %>%
+    dplyr::group_by(geoid) %>%
+    dplyr::summarise_if(is.numeric, sum) %>%
+    dplyr::ungroup()
+
+annual.total.2018 <- data.2018 %>%
+    dplyr::group_by(geoid) %>%
+    dplyr::summarise_if(is.numeric, sum) %>%
+    dplyr::ungroup()
+
+annual.total.2016 %>%
+    dplyr::mutate(year = 2016) %>%
+    dplyr::bind_rows(annual.total.2018 %>%
+                     dplyr::mutate(year = 2018)) %>%
+    dplyr::select(year, geoid, starts_with("energy")) %>%
+    tidyr::gather(variable, value, energy.elec:energy.overall) %>%
+    ggplot2::ggplot(ggplot2::aes(x = year, y = value, group = year)) +
+    ggplot2::geom_boxplot() +
+    ggplot2::facet_wrap(.~variable) +
+    ggplot2::theme()
+## ggplot2::ggsave(sprintf("figures/cmp_2016_2018_energy_%s.png", grid.level), width=8, height=6)
 ```
