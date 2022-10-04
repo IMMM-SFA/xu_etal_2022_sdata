@@ -264,14 +264,25 @@ Following the steps to reproduce the analysis
     - fix a field in nursing home model using 3_correct_nursingHome.R
     - change the year and "Day of Week for Start Day" in the RunPeriod object to
       match the actual simulation year
-8. Use run_sim.py to run simulations
+8. Use run_sim.py to run simulations:
+   - evaluate run_multi_thread(k) function with the desired number of thread to
+     run the simulation combinations specified in "df" at the beginning read
+     from intermediate_data/epw_idf_to_simulate.csv.
+   - use test_run_all_model() to simulate all idf files in the same folder using
+     a certain .epw file. This function is used in generating the simulation
+     result in the verification against ResStock ComStock, and various
+     scorecards
 9. Validation with measured and other data source
     - county level: see details in verify_county.R
     - county neighborhood: verify against Energy Atlas neighborhood data in 2016.
      See details in verify_county.R
     - verify with ResStock and ComStock data for LA county. See details in
       verify_resstock_comstock.R.
-10. Produce grid-level heat emission data.
+    - verify with PNNL prototype model and NREL reference model scorecards. See
+      details in verify_scorecards.R
+10. Produce grid-level heat emission data. The hourly grid-level or census tract
+    level heat and energy data is compiled in aggregate_to_grid.R, by running
+    compile.grid.data() for certain grid level (or census tract) and year.
 11. Produce building metadata geojson: use join_building_to_tract_finer_grid.R
 
 <!-- Run the following scripts in the `workflow` directory to re-create this experiment: -->
