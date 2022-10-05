@@ -117,6 +117,7 @@ wquantile.generic <- function(x, probs, cdf.gen, weights = NA) {
   })
 }
 
+## from: https://aakinshin.net/posts/weighted-quantiles/
 # Weighted Harrell-Davis quantile estimator
 whdquantile <- function(x, probs, weights = NA) {
   cdf.gen <- function(n, p) return(function(cdf.probs) {
@@ -125,6 +126,7 @@ whdquantile <- function(x, probs, weights = NA) {
   wquantile.generic(x, probs, cdf.gen, weights)
 }
 
+## from: https://aakinshin.net/posts/weighted-quantiles/
 # Weighted Type 7 quantile estimator
 wquantile <- function(x, probs, weights = NA) {
   cdf.gen <- function(n, p) return(function(cdf.probs) {
@@ -222,9 +224,16 @@ gas.75.comparison =
                   whdquantile(x = df.gas$Btu.per.sqft, probs = 0.75, weights = df.gas$`num establishments`),
                   )
 print(gas.75.comparison)
+
+gas.75.comparison %>%
+    readr::write_csv("intermediate_data/gas_75_percentile_cmp.csv")
+
+png("figures/manufacturing_gas_cdf.png", width = 8, height = 4, units = "in", res=300)
 plot(approx_cdf_type7_maybe(df.gas$Btu.per.sqft, df.gas$`num establishments`)) +
   geom_vline(aes(xintercept=weighted.quantile, colour=method, linetype=method),
-             gas.75.comparison)
+             ## gas.75.comparison)
+gas.75.comparison %>% dplyr::filter(method %in% c("type 1 via rep", "wquantile (type 7)", "whdquantile", "type 7 via rep")))
+dev.off()
 
 elec.75.comparison =
   tibble::tribble(~ method, ~weighted.quantile,
@@ -245,6 +254,10 @@ elec.75.comparison =
                   whdquantile(x = df.elec$Btu.per.sqft, probs = 0.75, weights = df.elec$`num establishments`),
                   )
 print(elec.75.comparison)
+
+elec.75.comparison %>%
+    readr::write_csv("intermediate_data/elec_75_percentile_cmp.csv")
+
 plot(approx_cdf_type7_maybe(df.elec$Btu.per.sqft, df.elec$`num establishments`)) +
   geom_vline(aes(xintercept=weighted.quantile, colour=method, linetype=method),
              elec.75.comparison)
