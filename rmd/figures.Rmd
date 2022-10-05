@@ -313,6 +313,7 @@ df.com.to.plot <- df.comstock.la %>%
   dplyr::mutate(vintage = case_when(vintage %in% c("2011", "2014", "2015", "2017") ~ "2013",
                                     vintage %in% c("1985", "1996", "2003", "2007") ~ "2004",
                                     TRUE ~ "pre 1980")) %>%
+  dplyr::mutate(vintage = factor(vintage, levels = c("pre 1980", "2004", "2013"))) %>%
   {.}
 
 get.plot.df.cmp.res.com.stock.total <- function(df.res.com, source.label, df.sim) {
@@ -337,11 +338,75 @@ result.G0600370.compile.elec.gas.nonres.total <- result.G0600370.compile.elec.ga
   dplyr::ungroup() %>%
   {.}
 
+## read California Building Energy Benchmarking Program data
+## https://www.energy.ca.gov/media/4640
+df.benchmark <- readxl::read_excel("input_data/CECdata/2018_Download_20220826_ADA.xlsx", skip = 2)
+
+df.benchmark.la <- df.benchmark %>%
+    dplyr::filter(`County from Geocoding` == "Los Angeles") %>%
+    dplyr::select(`Property Id`, `Property Name`, `Year Built`, `Property GFA - Calculated (Buildings) (ft²)`,
+                  `Primary Property Type - Portfolio Manager-Calculated`,
+                  `Electricity Use - Grid Purchase (kBtu)`,
+                  `Electricity Use – Generated from Onsite Renewable Systems and Used Onsite (kBtu)`,
+                  `Natural Gas Use (kBtu)`
+                  ) %>%
+    dplyr::rename(elec.grid.purchase = `Electricity Use - Grid Purchase (kBtu)`,
+                  elec.onsite = `Electricity Use – Generated from Onsite Renewable Systems and Used Onsite (kBtu)`) %>%
+    dplyr::mutate(elec.kbtu = case_when(is.na(elec.onsite) ~ elec.grid.purchase,
+                                        is.na(elec.grid.purchase) ~ elec.onsite,
+                                        TRUE ~ elec.grid.purchase + elec.onsite),
+                  gas.kbtu = `Natural Gas Use (kBtu)`) %>%
+    dplyr::mutate(total.kbtu = case_when(is.na(elec.kbtu) ~ gas.kbtu,
+                                         is.na(gas.kbtu) ~ elec.kbtu,
+                                         TRUE ~ elec.kbtu + gas.kbtu)) %>%
+    dplyr::select(`Property Id`, `Property Name`, `Year Built`, `Property GFA - Calculated (Buildings) (ft²)`,
+                  `Primary Property Type - Portfolio Manager-Calculated`, elec.kbtu, gas.kbtu, total.kbtu) %>%
+    dplyr::mutate(vintage = case_when(`Year Built` < 1980 ~ "pre 1980",
+                                       `Year Built` < 2009 ~ "2004",
+                                      TRUE ~ "2013")) %>%
+    dplyr::mutate(vintage = factor(vintage, levels = c("pre 1980", "2004", "2013"))) %>%
+    {.}
+
+df.benchmark.la %>%
+    readr::write_csv("intermediate_data/benchmark_la.csv")
+
+df.benchmark.la %>%
+    distinct(`Primary Property Type - Portfolio Manager-Calculated`) %>%
+    readr::write_csv("intermediate_data/benchmark_building_type.csv")
+
+df.benchmark.recode <- readr::read_csv("input_data/benchmark_building_type_recode.csv") %>%
+    na.omit()
+
+df.benchmark.la %>%
+    summary()
+
+df.benchmark.stat.la <- df.benchmark.la %>%
+    dplyr::inner_join(df.benchmark.recode, by="Primary Property Type - Portfolio Manager-Calculated") %>%
+    dplyr::rename(gsf.sqft = `Property GFA - Calculated (Buildings) (ft²)`) %>%
+    dplyr::rename(type = remap) %>%
+    dplyr::mutate(type = case_when(type == "hotel" ~ ifelse(gsf.sqft >= 64583.46, "LargeHotel", "SmallHotel"),
+                                   type == "office" ~ case_when(gsf.sqft > 100000 ~ "LargeOffice",
+                                                                gsf.sqft < 2500 ~ "SmallOffice",
+                                                                TRUE ~ "MediumOffice"),
+                                   TRUE ~ type)) %>%
+    dplyr::mutate(`EUI.GJ.per.m2` = (total.kbtu / 948) / (gsf.sqft * 0.092903)) %>%
+    dplyr::filter(!is.na(`EUI.GJ.per.m2`)) %>%
+    dplyr::group_by(type, vintage) %>%
+    dplyr::summarise_at(vars(EUI.GJ.per.m2),
+                        tibble::lst(Q1 = ~quantile(., probs=0.25), median, Q3 = ~quantile(., probs=0.75))) %>%
+    dplyr::ungroup() %>%
+    dplyr::filter(!(type %in% c("supermarket", "college", "religious", "Outpatient", "RetailStripmall", "QuickServiceRestaurant"))) %>%
+    dplyr::mutate(vintage = factor(vintage, levels = c("pre 1980", "2004", "2013"))) %>%
+    {.}
+
+df.benchmark.stat.la
+
 df.com.to.plot <- df.com.to.plot %>%
   dplyr::filter(type != "SecondarySchool") %>%
   get.plot.df.cmp.res.com.stock.total(source.label = "ComStock", df.sim = result.G0600370.compile.elec.gas.nonres.total) %>%
   {.}
 
+benchmark.color = "#C77CFF"
 df.com.to.plot %>%
   dplyr::filter(source == "ComStock") %>%
   ggplot2::ggplot() +
@@ -349,6 +414,9 @@ df.com.to.plot %>%
                         outlier.size = 0.2, lwd = 0.2, show.legend = FALSE) +
   ggplot2::geom_point(ggplot2::aes(x = type, y = EUI.GJ.per.m2), color = "#00BFC4",
                       data = df.com.to.plot %>% filter(source == "this study")) +
+  ggplot2::geom_errorbar(ggplot2::aes(x = type, ymin = Q1, ymax = Q3),
+                         data = df.benchmark.stat.la, color = benchmark.color) +
+  ggplot2::geom_point(ggplot2::aes(x = type, y = median), data = df.benchmark.stat.la, color = benchmark.color, shape = 4) +
   ggplot2::facet_wrap(vintage~., nrow = 1) +
   ggplot2::ylab("GJ/m2") +
   ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 90))
