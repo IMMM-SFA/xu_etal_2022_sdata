@@ -84,6 +84,9 @@ quartile.stats.by.type <- df.la.building.remove.geo %>%
     dplyr::summarise_at(vars(value), tibble::lst(min, Q1=~quantile(., probs=0.25), median, Q3=~quantile(., probs=0.75), mean, max)) %>%
     dplyr::ungroup() %>%
     dplyr::filter(remap.EP.ref.building != "?") %>%
+    {.}
+
+quartile.stats.by.type %>%
     readr::write_csv("intermediate_data/quartile_summary_by_type.csv")
 
 quartile.stats.by.ep.type <- df.la.building.remove.geo %>%
@@ -95,6 +98,9 @@ quartile.stats.by.ep.type <- df.la.building.remove.geo %>%
     dplyr::summarise_at(vars(value), tibble::lst(min, Q1=~quantile(., probs=0.25), median, Q3=~quantile(., probs=0.75), mean, max)) %>%
     dplyr::ungroup() %>%
     dplyr::filter(remap.EP.ref.building != "?") %>%
+    {.}
+
+quartile.stats.by.ep.type %>%
     readr::write_csv("intermediate_data/quartile_summary_by_EP_type.csv")
 
 size.type.summary %>%
