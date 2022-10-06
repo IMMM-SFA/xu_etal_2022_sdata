@@ -326,6 +326,73 @@ readr::write_csv("intermediate_data/sim_gas_cmp_CEC_2018.csv")
 get.agg.sim.energy.by.atlas.type(annual.sim.result.idf.epw.2016)
     readr::write_csv("intermediate_data/energy_emission_by_EnergyAtlas_type_2016.csv")
 
+## read cec data by type
+df.cec.elec.type <- readxl::read_excel("input_data/CECdata/2022-10-05 Tianzhen Hong - Attach - Electricity & Gas Consumption by NAICS Category in Los Angeles County 2018.xlsx", sheet = 1, skip = 1)
+
+df.cec.elec.sector <- df.cec.elec.type %>%
+    dplyr::filter(Sector %in% c("Commercial", "Industrial", "Residential")) %>%
+    dplyr::group_by(Sector) %>%
+    dplyr::summarise(Gwh = sum(GWh)) %>%
+    dplyr::ungroup() %>%
+    {.}
+
+df.cec.gas.type <- readxl::read_excel("input_data/CECdata/2022-10-05 Tianzhen Hong - Attach - Electricity & Gas Consumption by NAICS Category in Los Angeles County 2018.xlsx", sheet = 2, skip = 1)
+
+df.cec.gas.sector <- df.cec.gas.type %>%
+    dplyr::filter(Sector %in% c("Commercial", "Industrial", "Residential")) %>%
+    dplyr::mutate(Mtherm = `Consumption (Therms)` * 1e-6) %>%
+    dplyr::group_by(Sector) %>%
+    dplyr::summarise(Mtherm = sum(Mtherm)) %>%
+    dplyr::ungroup() %>%
+    {.}
+
+df.cec.gas.sector
+
+df.cec.cmp.by.sector.fuel <- agg.by.energy.atlas.type.2018 %>%
+    dplyr::select(usetype, energy.gas, energy.elec) %>%
+    dplyr::mutate(Sector = ifelse(usetype %in% c("single_family", "multi_family", "residential_other"),
+                                  "Residential", stringr::str_to_title(usetype))) %>%
+    dplyr::group_by(Sector) %>%
+    dplyr::summarise_if(is.numeric, sum) %>%
+    dplyr::ungroup() %>%
+    ## million therm gas
+    dplyr::mutate(Mtherm = energy.gas * 9.48043e-9 * 1e-6) %>%
+    dplyr::mutate(Gwh = energy.elec * 2.77778e-7 * 1e-6) %>%
+    dplyr::select(-starts_with("energy")) %>%
+    dplyr::mutate(source = "this study") %>%
+    dplyr::bind_rows(df.cec.elec.sector %>%
+                     dplyr::inner_join(df.cec.gas.sector, by = "Sector") %>%
+                     dplyr::mutate(source = "CEC")) %>%
+    tidyr::gather(fuel, value, Mtherm:Gwh) %>%
+    dplyr::group_by(Sector, fuel) %>%
+    dplyr::filter(n() == 2) %>%
+    dplyr::ungroup() %>%
+    {.}
+
+df.cec.cmp.by.sector.fuel %>%
+    readr::write_csv("intermediate_data/sim_gas_cmp_CEC_2018_com_Ind_Res.csv")
+
+dfs.cec.cmp.by.fuel <- df.cec.cmp.by.sector.fuel %>%
+    dplyr::mutate_at(vars(Sector), recode, "Commercial" = "Commercial + Industrial",
+                     "Industrial" = "Commercial + Industrial") %>%
+    dplyr::group_by(Sector, source, fuel) %>%
+    dplyr::summarise(value = sum(value)) %>%
+    dplyr::ungroup() %>%
+    tidyr::spread(source, value) %>%
+    dplyr::select(fuel, everything()) %>%
+    dplyr::group_by(fuel) %>%
+    dplyr::group_split() %>%
+    {.}
+
+lapply(dfs.cec.cmp.by.fuel, function(df) {
+    df %>%
+        janitor::adorn_totals() %>%
+        {.}
+}) %>%
+    dplyr::bind_rows() %>%
+    dplyr::mutate(ratio = `this study` / CEC) %>%
+    readr::write_csv("intermediate_data/sim_gas_cmp_CEC_2018_comAndInd_Res.csv")
+
 convert.unit.sim.summary <- function(df) {
     df %>%
         ## J to Gwh
