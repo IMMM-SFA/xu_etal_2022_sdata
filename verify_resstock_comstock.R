@@ -264,7 +264,7 @@ df.benchmark.recode <- readr::read_csv("input_data/benchmark_building_type_recod
 df.benchmark.la %>%
     summary()
 
-df.benchmark.stat.la <- df.benchmark.la %>%
+df.benchmark.la.type.recode <- df.benchmark.la %>%
     dplyr::inner_join(df.benchmark.recode, by="Primary Property Type - Portfolio Manager-Calculated") %>%
     dplyr::rename(gsf.sqft = `Property GFA - Calculated (Buildings) (ft²)`) %>%
     dplyr::rename(type = remap) %>%
@@ -273,6 +273,24 @@ df.benchmark.stat.la <- df.benchmark.la %>%
                                                                 gsf.sqft < 2500 ~ "SmallOffice",
                                                                 TRUE ~ "MediumOffice"),
                                    TRUE ~ type)) %>%
+    {.}
+
+
+df.benchmark.la.type.recode %>%
+    dplyr::mutate(`EUI.GJ.per.m2` = (total.kbtu / 948) / (gsf.sqft * 0.092903)) %>%
+    dplyr::filter(!is.na(`EUI.GJ.per.m2`)) %>%
+    dplyr::group_by(type, vintage) %>%
+    dplyr::count() %>%
+    dplyr::ungroup() %>%
+    dplyr::arrange(desc(`n`)) %>%
+    dplyr::filter(n)
+    print(n=Inf)
+
+large.enough = 30
+df.benchmark.stat.la <- df.benchmark.la.type.recode %>%
+    dplyr::group_by(type, vintage) %>%
+    dplyr::filter(n() > large.enough) %>%
+    dplyr::ungroup() %>%
     dplyr::mutate(`EUI.GJ.per.m2` = (total.kbtu / 948) / (gsf.sqft * 0.092903)) %>%
     dplyr::filter(!is.na(`EUI.GJ.per.m2`)) %>%
     dplyr::group_by(type, vintage) %>%
@@ -298,7 +316,8 @@ df.com.to.plot <- df.com.to.plot %>%
   get.plot.df.cmp.res.com.stock.total(source.label = "ComStock", df.sim = result.G0600370.compile.elec.gas.nonres.total) %>%
   {.}
 
-benchmark.color = "#C77CFF"
+## benchmark.color = "#C77CFF"
+benchmark.color = "blue"
 df.com.to.plot %>%
   dplyr::filter(source == "ComStock") %>%
   ggplot2::ggplot() +
@@ -312,6 +331,7 @@ df.com.to.plot %>%
   ggplot2::facet_wrap(vintage~., nrow = 1) +
   ggplot2::ylab("GJ/m2") +
   ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 90))
+
 ggplot2::ggsave("figures/cmp_comstock_this_study.png", width = 8, height = 6)
 
 df.res.to.plot %>%
