@@ -228,6 +228,7 @@ intermediate_data/
 # Data Files
 *.csv
 *.geojson
+*.zip
 
 # word files
 *.docx
