@@ -7,6 +7,12 @@ library("tmap")
 ## annual 2018
 
 compile.grid.data <- function(grid.level, year) {
+
+    if (year == 2018) {
+        output.dir = "output_data"
+    } else {
+        output.dir = "intermediate_data"
+    }
     result.file = sprintf("intermediate_data/annual_sim_result_by_idf_epw_%d.csv", year)
     time.pref = sprintf("annual_%d", year)
     result <- readr::read_csv(result.file)
@@ -152,7 +158,7 @@ compile.grid.data <- function(grid.level, year) {
                             col_types = readr::cols())
         }) %>%
             dplyr::bind_rows() %>%
-            readr::write_csv(sprintf("output_data/hourly_heat_energy/%s%s.csv", time.pref, grid.suf))
+            readr::write_csv(sprintf("%s/hourly_heat_energy/%s%s.csv", output.dir, time.pref, grid.suf))
     } else {
         for (month.str in months) {
             result.time.files <- list.files(sprintf("intermediate_data/hourly_heat_energy/%s%s", time.pref, grid.suf),
@@ -165,7 +171,7 @@ compile.grid.data <- function(grid.level, year) {
                 dplyr::bind_rows() %>%
                 {.}
             df.month %>%
-                readr::write_csv(sprintf("output_data/hourly_heat_energy/%s%s_%s.csv", time.pref, grid.suf, month.str))
+                readr::write_csv(sprintf("%s/hourly_heat_energy/%s%s_%s.csv", output.dir, time.pref, grid.suf, month.str))
         }
     }
 
@@ -189,8 +195,10 @@ compile.grid.data <- function(grid.level, year) {
 
 }
 
-for (year in c(2018, 2016)) {
-    for (grid.level in c("coarse", "finer", "tract")) {
+for (year in c(2016)) {
+    ## for (year in c(2018, 2016)) {
+    for (grid.level in c("finer", "tract")) {
+        ## for (grid.level in c("coarse", "finer", "tract")) {
         compile.grid.data(grid.level, year)
     }
 }
