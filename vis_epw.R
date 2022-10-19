@@ -4,7 +4,8 @@ library("readr")
 ## for july data
 ## climate.folder = "input_data/M02_EnergyPlus_Forcing_Historical_LowRes"
 ## for 2018 annual
-climate.folder = "input_data/annual_WRF/M02_EnergyPlus_Forcing_Historical_LowRes_ann_2018"
+year = 2016
+climate.folder = sprintf("input_data/annual_WRF/M02_EnergyPlus_Forcing_Historical_LowRes_ann_%d", year)
 
 col.names = c("year","month","day","hour","minute",
               "Datasource","DryBulb.C","DewPoint.C",
@@ -55,7 +56,7 @@ df.weather.with.cell <- df.all.weather %>%
 
 df.weather.with.cell %>%
     dplyr::select(month:hour, cell.id, DryBulb.C, RelHum.percent, `WindSpd.m/s`) %>%
-    readr::write_csv("intermediate_data/weather_2018.csv")
+    readr::write_csv(sprintf("intermediate_data/weather_%d.csv", year))
 
 df.weather.with.cell %>%
   dplyr::mutate(cell.id = factor(cell.id)) %>%
