@@ -79,7 +79,7 @@ df.month.hour.avg.wperm2.by.footprint %>%
     ggplot2::expand_limits(y = 0) +
     ggplot2::ggtitle("September diurnal profile for LA city (no surface component)") +
     ggplot2::ylab("Heat emission (W/m2)") +
-    ggplot2::theme()
+    ggplot2::theme(text = ggplot2::element_text(size = 17))
 ggplot2::ggsave("figures/diurnal_sep_city_div_footprint.png", width = 8, height = 4)
 
 ## check one time snapshot
@@ -173,7 +173,8 @@ city.diurnal.by.season %>%
     ggplot2::ylab("Heat emission (W/m2)") +
     ggplot2::ggtitle("Hourly total heat emission (W/m2) across the city") +
     ggplot2::expand_limits(y = 77) +
-    ggplot2::theme(plot.margin = ggplot2::margin(0.5,0.5,1.5,0.5, "cm"))
+    ggplot2::theme(plot.margin = ggplot2::margin(0.5,0.5,1.5,0.5, "cm"),
+                   text = ggplot2::element_text(size = 18))
 ggplot2::ggsave("figures/diurnal_by_season_city.png", width = 8, height = 4)
 
 city.boundary %>%
