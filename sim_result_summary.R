@@ -27,9 +27,13 @@ pref = "annual"
 ## result.dir = "result_ann_0520"
 ## result.csv.dir = sprintf("sim_result%s_0520_csv/%s.csv", suf, dirname)
 ## annual results
-year = 2016
+year = 2018
 result.dir = sprintf("output_data/EP_output/result%s_WRF_%d", suf, year)
 result.csv.dir = sprintf("output_data/EP_output_csv/sim_result%s_WRF_%d_csv", suf, year)
+
+## year = 2016
+## result.dir = sprintf("intermediate_data/EP_output/result%s_WRF_%d", suf, year)
+## result.csv.dir = sprintf("intermediate_data/EP_output_csv/sim_result%s_WRF_%d_csv", suf, year)
 
 length(dirs)
 
@@ -111,6 +115,14 @@ result.ann %>%
 result.ann %>%
   readr::write_csv(sprintf("intermediate_data/%s_sim_result_by_idf_epw_%d.csv", pref, year))
 ## readr::write_csv("annual_sim_result_by_idf_epw.csv")
+
+result.ann %>%
+    tidyr::separate(`Date/Time`, into = c("month", "suffix"), sep = "/") %>%
+    dplyr::select(-suffix) %>%
+    dplyr::group_by(idf.kw, epw.id, month) %>%
+    dplyr::summarise_if(is.numeric, sum) %>%
+    dplyr::ungroup() %>%
+    readr::write_csv(sprintf("intermediate_data/monthly_total_result_%d.csv", year))
 
 result.ann %>%
     dplyr::group_by(idf.kw, epw.id) %>%
