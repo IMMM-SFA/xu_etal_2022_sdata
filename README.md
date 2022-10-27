@@ -323,3 +323,30 @@ Refer to rmd/figures.Rmd
 <!-- | Script Name | Description | How to Run | -->
 <!-- | --- | --- | --- | -->
 <!-- | `generate_figures.py` | Script to generate my figures | `python3 generate_figures.py -i /path/to/inputs -o /path/to/outuptdir` | -->
+
+## Comparison of 2018 and 2016 results
+2016 results is also available for hourly AH and energy consumption. Comparing
+with the 2018 results, the county total AH is 1.2% lower and energy consumption
+is 0.3% higher, with an annual average dry bulb temperature difference of
+0.03°C. Monthly difference between the two years are more substential, with as
+high as 32% difference in AH in January with a 3.3°C difference in average dry
+bulb temperature.
+
+The following figure plots the average monthly dry bulb temperature, relative
+humidity, and wind speed. 2018 has hotter weather from July to September and in
+January. 2018 is colder in February and March.
+
+![cmp_2016_2018_weather](figures/cmp_2016_2018_weather.png)
+
+This figure compares the total heat emission and energy consumption for the
+whole county. We can see the heat emission between the two years is pretty
+similar. Energy consumption differs a bit more. The difference generally follows
+the temperature trend.
+
+![cmp_2016_2018_county_total](figures/cmp_2016_2018_county_total.png)
+
+The following figure shows the AH without the surface component. The AH from
+non-envelope components is more pronounced between the two years and still
+follows the temperature trend.
+
+![cmp_2016_2018_county_total_no_surf](figures/cmp_2016_2018_county_total_no_surf.png)
