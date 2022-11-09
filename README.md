@@ -160,7 +160,7 @@ building size, and centroid geometry of the compiled
 | GeneralUseType | Building type, inherited from Assessor_Parcels_Data_-_2019.csv |
 | SpecificUseType | Building type, inherited from Assessor_Parcels_Data_-_2019.csv |
 | EffectiveYearBuilt | Built year, inherited from Assessor_Parcels_Data_-_2019.csv |
-| HEIGHT | Building height, inherited LARIAC6_LA_County.geojson |
+| HEIGHT | Building height in ft, inherited from LARIAC6_LA_County.geojson |
 | building.type | Prototype building type |
 | vintage | Prototype building vintage |
 | idf.name | Prototype model filename used to simulate the building |
