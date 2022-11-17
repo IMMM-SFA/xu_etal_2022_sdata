@@ -160,7 +160,6 @@ building size, and centroid geometry of the compiled
 | GeneralUseType | Building type, inherited from Assessor_Parcels_Data_-_2019.csv |
 | SpecificUseType | Building type, inherited from Assessor_Parcels_Data_-_2019.csv |
 | EffectiveYearBuilt | Built year, inherited from Assessor_Parcels_Data_-_2019.csv |
-| HEIGHT | Building height in ft, inherited from LARIAC6_LA_County.geojson |
 | building.type | Prototype building type |
 | vintage | Prototype building vintage |
 | idf.name | Prototype model filename used to simulate the building |
@@ -172,6 +171,8 @@ building size, and centroid geometry of the compiled
 | id.grid.finer | The grid cell in the 450m x 450m grid system containing this building |
 | id.tract | The census tract GEOID containing this building |
 | geometry | Point of building centroid |
+
+Building height info is also available up request.
 
 - aggregated heat emission and energy data for the three spatial resolutions.
     - finer grid 450 x 450m
