@@ -172,7 +172,7 @@ building size, and centroid geometry of the compiled
 | id.tract | The census tract GEOID containing this building |
 | geometry | Point of building centroid |
 
-Building height info is also available up request.
+Building height info is also available upon request.
 
 - aggregated heat emission and energy data for the three spatial resolutions.
     - finer grid 450 x 450m
