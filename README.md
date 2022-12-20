@@ -147,9 +147,9 @@ Held in the intermediate_data folder, including the data files in the intermedia
 ### Output data
 
 - simulation results for prototype-building-wrf-grid-combination: held in
-  EP_output/result_ann_WRF_<year>, for 2016 and 2018: Each subfolder contains a
-  simulation output of a prototype model and WRF grid as follows <prototype
-  model key word>____<WRF grid ID>. The eplusout.csv in each subfolder holds the
+  EP_output/result_ann_WRF_\<year\>, for 2016 and 2018: Each subfolder contains a
+  simulation output of a prototype model and WRF grid as follows \<prototype
+  model key word\>____\<WRF grid ID\>. The eplusout.csv in each subfolder holds the
   hourly energy and heat emission results.
 - Building metadata: building_metadata.geojson file holds the type, vintage,
 building size, and centroid geometry of the compiled
