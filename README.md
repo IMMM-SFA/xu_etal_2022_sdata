@@ -2,7 +2,8 @@ _your zenodo badge here_
 
 # xu_etal_2022_tbd
 
-**LA County Building Anthropogenic Heat During Heat Waves**
+**A multi-scale time-series dataset of anthropogenic
+heat from buildings in Los Angeles County**
 
 Yujie Xu<sup>1</sup>, Pouya Vahmani<sup>1</sup>, Tianzhen Hong\*, Andy Jones<sup>1</sup>
 
