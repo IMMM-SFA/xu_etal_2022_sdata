@@ -1,5 +1,5 @@
 
-# xu_etal_2022_tbd
+# xu_etal_2022_sdata
 
 **LA County Building Anthropogenic Heat During Heat Waves**
 
@@ -28,7 +28,7 @@ microclimate, as well as informing effective AH reduction policy interventions
 across LA County.
 
 ## Journal reference
-TBD
+Scientific Data
 
 ## Code reference
 <!-- References for each minted software release for all code involved.   -->
@@ -54,8 +54,7 @@ Held in the input_data folder, including the external data files referenced down
 |-------------|-------------------|
 | Assessor_Parcels_Data_-_2019.csv                                           | [link] (https://data.lacounty.gov/search?categories=open%20data)                                                              |
 | LARIAC6_LA_County.geojson                                                  | [link] (https://lariac-lacounty.hub.arcgis.com/)                                                                              |
-| WRF data in annual_WRF and M02_EnergyPlus_Forcing_Historical_LowRes folder | Generated from The Weather Research and Forecasting (WRF) model (version 4.2.1)                                              |
-| high-resolution 450m x 450 grid latitude longitude                         | generated from WRF model                                                                                                     |
+| WRF data in annual_WRF and M02_EnergyPlus_Forcing_Historical_LowRes folder | Generated from The Weather Research and Forecasting (WRF) model (version 4.2.1) [Link] (https://github.com/wrf-model/WRF)                                     |
 | Energy Atlas data set                                                      | [link] (https://www.energyatlas.ucla.edu/)                                                                                    |
 | CEC county-level electricity and gas consumption in CECdata folder         | [link] (http://www.ecdms.energy.ca.gov/)                                                                                       |
 | 2018 Manufacturing Energy Consumption Survey (MECS), in MECS folder        | [link] (https://www.eia.gov/consumption/manufacturing/)                                                                       |
