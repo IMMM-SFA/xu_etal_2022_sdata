@@ -1,4 +1,3 @@
-_your zenodo badge here_
 
 # xu_etal_2022_tbd
 
