@@ -191,15 +191,15 @@ emission data.
 |-------------|-------------------|
 | geoid | WRF grid ID or census tract GEOID. Use the geojson for the corresponding spatial resolution to look up the location and shape of the GeoID |
 | timestamp | Hourly, local time of LA county. |
-| emission.exfiltration | Zone exfiltration heat loss [MJ] |
-| emission.exhaust | Zone exhaust air heat loss [MJ] |
-| emission.rej | HVAC system heat rejection [MJ] |
-| emission.rel | HVAC system relief air heat loss [MJ] |
-| emission.surf | Surface heat emission [MJ] |
-| emission.total | Total heat emission [MJ] |
-| energy.elec | Total electricity consumption [MJ] |
-| energy.gas | Total gas consumption [MJ] |
-| energy.total | Total electricity and gas consumption [MJ] |
+| emission.exfiltration | Zone exfiltration heat loss [J] |
+| emission.exhaust | Zone exhaust air heat loss [J] |
+| emission.rej | HVAC system heat rejection [J] |
+| emission.rel | HVAC system relief air heat loss [J] |
+| emission.surf | Surface heat emission [J] |
+| emission.total | Total heat emission [J] |
+| energy.elec | Total electricity consumption [J] |
+| energy.gas | Total gas consumption [J] |
+| energy.total | Total electricity and gas consumption [J] |
 
 - Aggregated geographical data referenced in heat emission and energy
   consumption. The "geo_data" folder contains the grid and census tract polygon
